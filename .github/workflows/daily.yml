@@ -1,0 +1,78 @@
+# The daily Belch Bets run, in GitHub's cloud. Times are UTC (ET + 4 until Nov 1, + 5 after).
+#   picks    ~12:15-1:15 PM ET  noon odds + injury report -> the pick -> site
+#   close    every 15 min, evenings: closing line for the pick's game (does nothing until near tip)
+#   results  ~9 AM ET: ESPN box scores -> settle the bet -> site
+# Also started by the site's "Update now" button (via the Cloudflare Worker) or by hand from the Actions tab.
+name: daily
+
+on:
+  schedule:
+    - cron: '15 17 * * *'               # picks
+    - cron: '*/15 22,23,0,1,2,3 * * *'   # close
+    - cron: '0 13 * * *'                 # results
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: picks, close or results
+        required: true
+        default: picks
+        type: choice
+        options: [picks, close, results]
+
+concurrency:
+  group: belch-bets-pipeline            # one run at a time; a second one waits
+  cancel-in-progress: false
+
+permissions:
+  contents: write                       # the run commits its data back
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: odds_model
+    env:
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TZ: America/New_York
+    steps:
+      - name: Which job
+        id: mode
+        working-directory: .
+        run: |
+          if [ -n "${{ inputs.mode }}" ]; then m="${{ inputs.mode }}"
+          elif [ "${{ github.event.schedule }}" = "15 17 * * *" ]; then m=picks
+          elif [ "${{ github.event.schedule }}" = "0 13 * * *" ]; then m=results
+          else m=close; fi
+          echo "mode=$m" >> "$GITHUB_OUTPUT"; echo "Running: $m"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - uses: actions/setup-java@v4
+        if: steps.mode.outputs.mode == 'picks'
+        with: { distribution: temurin, java-version: '17' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: pip install -q -r ../requirements.txt
+      - name: Build features from the box scores
+        if: steps.mode.outputs.mode != 'close'
+        run: python build_features.py > /dev/null
+      - name: Run the pipeline
+        run: |
+          if [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20
+          else python daily_pipeline.py ${{ steps.mode.outputs.mode }}; fi
+      - name: Save the day's data
+        if: always()
+        working-directory: .
+        run: |
+          git config user.name "belch-bets-bot"
+          git config user.email "belch-bets-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -q -m "${{ steps.mode.outputs.mode }} run $(date +%F)"
+          git pull -q --rebase && git push -q

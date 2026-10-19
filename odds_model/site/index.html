@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b0d10">
+<title>Belch Bets</title>
+<script src="model.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+<style>
+/* One open column. Hierarchy from type size and space, not boxes. Accent only marks the bet. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --ink: #eceef1;
+  --ink-2: #b9bfc8;
+  --muted: #7f8794;
+  --line: #1e232a;
+  --line-2: #2a3039;
+  --accent: #e8a35c;
+  --win: #5cc68c;
+  --loss: #ee6d64;
+  --display: "Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Arial, sans-serif;
+  --body: "Libre Franklin", "Franklin Gothic Book", "Helvetica Neue", Arial, sans-serif;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 14.5px/1.55 var(--body); margin: 0; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+.page { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 0 72px; }
+.muted { color: var(--muted); }
+.pos { color: var(--win); }
+.neg { color: var(--loss); }
+
+/* Top bar */
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding-block: 18px; border-bottom: 1px solid var(--line); }
+.brand { font: 800 19px/1 var(--display); letter-spacing: -.01em; text-decoration: none; }
+.brand span { color: var(--accent); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: #151920; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.seg button:focus-visible, .icon:focus-visible, .textbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.daynav { display: inline-flex; align-items: center; gap: 2px; }
+.icon { width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; color: var(--ink-2); }
+.icon:not(:disabled):hover { background: #151920; }
+.icon:disabled { opacity: .3; cursor: default; }
+.textbtn { border: 0; background: none; padding: 4px 6px; font-size: 13px; color: var(--ink-2); cursor: pointer; text-decoration: none; }
+.textbtn:hover { color: var(--ink); }
+.textbtn:disabled { opacity: .35; cursor: default; }
+.flag { font-size: 12px; color: var(--accent); }
+.updbtn { border: 1px solid var(--line-2); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.updbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.updbtn:disabled { cursor: default; color: var(--muted); }
+.updbtn.busy::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; animation: pulse 1s infinite alternate; }
+@keyframes pulse { from { opacity: .3; } to { opacity: 1; } }
+.updmsg { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 600px) { .controls .howlink { display: none; } .controls { gap: 8px 12px; } }
+
+.banner { margin-top: 20px; padding: 10px 0 10px 14px; border-left: 2px solid var(--loss); color: var(--loss); font-size: 14px; }
+
+/* The pick */
+.pick { padding-block: 44px 36px; display: grid; gap: 22px; }
+.pick .meta { font-size: 14px; color: var(--muted); }
+.pick .meta b { color: var(--ink-2); font-weight: 500; }
+.player { font: 800 clamp(36px, 6.6vw, 58px)/1.02 var(--display); letter-spacing: -.02em; margin: 0; }
+.betline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.betline .side { font: 700 clamp(25px, 4.2vw, 34px)/1.1 var(--display); letter-spacing: -.01em; color: var(--accent); }
+.betline .price { font: 500 clamp(20px, 3vw, 26px)/1 var(--display); color: var(--ink-2); }
+.bk { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; color: var(--ink-2); font-size: 14px; }
+.bk img { width: 20px; height: 20px; border-radius: 5px; display: block; flex: none; }
+.figs { display: flex; flex-wrap: wrap; gap: 14px 40px; }
+.fig { display: grid; gap: 2px; }
+.fig .n { font: 700 24px/1.1 var(--display); letter-spacing: -.01em; }
+.fig .n.accent { color: var(--accent); }
+.fig .k { font-size: 13px; color: var(--muted); }
+.outcome { font-size: 15px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.outcome .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.outcome b { font-weight: 600; }
+.nobet .player { color: var(--ink-2); }
+.nobet p { margin: 0; color: var(--muted); max-width: 56ch; }
+
+/* pick + book prices side by side */
+.hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 0 56px; align-items: center; }
+.hero > * { min-width: 0; }
+.books-top { padding-block: 0 36px; }
+@media (max-width: 860px) { .hero { grid-template-columns: minmax(0, 1fr); } .books-top { padding-top: 0; margin-top: -12px; } }
+.why-wrap { max-width: 620px; }
+body[data-view="glance"] .books-top { display: none !important; }
+body[data-view="glance"] .hero { grid-template-columns: minmax(0, 1fr); }
+
+/* Season strip (glance) */
+.season { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 34px; padding-block: 22px; border-top: 1px solid var(--line); }
+.season .rec { font: 600 20px/1.2 var(--display); letter-spacing: -.01em; }
+.season .rec small { font: 400 13px/1 var(--body); color: var(--muted); margin-left: 6px; }
+.spark svg { display: block; }
+.form { display: inline-flex; gap: 5px; align-items: center; }
+.form i { width: 9px; height: 9px; border-radius: 50%; display: block; background: var(--line-2); }
+.form i.w { background: var(--win); }
+.form i.l { background: var(--loss); }
+.season .fig .n { font-size: 22px; }
+.season .fig .spark, .season .fig .form { height: 27px; display: flex; align-items: center; }
+
+/* Deep dive sections: separated by a rule and a heading, no containers */
+.deep section { padding-block: 34px; border-top: 1px solid var(--line); display: grid; gap: 18px; min-width: 0; }
+.deep h2 { font: 700 20px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
+.shead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+.shead p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 60ch; }
+.two { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px 56px; align-items: start; }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.two > * { min-width: 0; }
+.sub-h { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; font-size: 12.5px; color: var(--muted); padding: 0 8px 10px; }
+td { padding: 12px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+.r { text-align: right; }
+.name { font-weight: 500; }
+.small { font-size: 12.5px; color: var(--muted); }
+
+/* projection strip */
+.strip { position: relative; height: 58px; margin-top: 4px; }
+.strip .track { position: absolute; left: 0; right: 0; top: 22px; height: 2px; background: var(--line-2); }
+.strip .mk { position: absolute; transform: translateX(-50%); font-size: 12px; white-space: nowrap; display: grid; justify-items: center; gap: 3px; }
+.strip .mk i { width: 2px; height: 12px; background: currentColor; display: block; }
+.strip .mk.up { top: 0; }
+.strip .mk.down { top: 17px; }
+.why { margin: 0; color: var(--ink-2); max-width: 62ch; font-size: 14.5px; }
+
+.books td { color: var(--ink-2); }
+.books tr.best td { color: var(--ink); }
+.books tr.best td:first-child { box-shadow: inset 2px 0 0 var(--accent); padding-left: 10px; }
+
+/* edge board */
+.board { table-layout: fixed; }
+.board col.c1 { width: 32%; } .board col.c2 { width: 30%; } .board col.c3 { width: 20%; } .board col.c4 { width: 18%; }
+.board td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board tr.is-bet td:first-child { box-shadow: inset 2px 0 0 var(--accent); padding-left: 10px; }
+.board tr.is-skip td, .board tr.is-skip .name { color: var(--muted); }
+.edge { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.edge .bar { width: 64px; height: 3px; background: var(--line-2); position: relative; border-radius: 2px; }
+.edge .bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink-2); border-radius: 2px; }
+.edge .bar .t { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+tr.is-bet .edge .bar i { background: var(--accent); }
+.dec-bet { color: var(--accent); font-weight: 600; }
+.dec-skip { color: var(--loss); opacity: .85; }
+.dec-pass { color: var(--muted); }
+.betcell { display: inline-flex; align-items: center; gap: 8px; }
+.betcell img { width: 16px; height: 16px; border-radius: 4px; }
+.betcell .short { display: none; }
+@media (max-width: 620px) {
+  /* phones: price under the bet, narrower edge column, decision word only */
+  .board col.c1 { width: 37%; } .board col.c2 { width: 27%; } .board col.c3 { width: 17%; } .board col.c4 { width: 19%; }
+  .board td, .board th { padding-left: 4px; padding-right: 4px; font-size: 13.5px; }
+  .board th { font-size: 12px; }
+  .board .small { font-size: 11.5px; }
+  .edge .bar, .why-sub, .board .bt .small { display: none; }
+  .board .betcell { gap: 6px; align-items: flex-start; }
+  .board .betcell img { margin-top: 2px; }
+  .board .bt .pr { display: block; font-size: 12px; line-height: 1.3; }
+  .board .edge { gap: 0; }
+  .board .edge s, .board .edge .arrow { display: none; }
+  .board td:last-child { text-overflow: clip; }
+  .betcell .long { display: none; } .betcell .short { display: inline; }
+  .board .name, .board td:first-child .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* season chart + plays */
+.stats { display: flex; flex-wrap: wrap; gap: 14px 44px; }
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); }
+.chart .zero { stroke: var(--muted); stroke-dasharray: 3 4; }
+.chart .tick { font: 11px var(--body); fill: var(--muted); }
+.chart .line { fill: none; stroke: var(--ink); stroke-width: 1.75; stroke-linejoin: round; }
+.chart .up { fill: var(--win); opacity: .16; }
+.chart .down { fill: var(--loss); opacity: .16; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.chart .dot, .chart .guide { opacity: 0; }
+.chart .guide { stroke: var(--muted); }
+.chart .hover .dot { opacity: 1; }
+.chart .hover .guide { opacity: .5; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12.5px; line-height: 1.4; padding: 6px 9px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -118%); z-index: 2; }
+.res { font-weight: 600; font-size: 13px; }
+.res.win { color: var(--win); } .res.loss { color: var(--loss); } .res.other { color: var(--muted); font-weight: 500; }
+
+.games { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0 40px; }
+.game { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.game span:last-child { color: var(--muted); }
+
+/* your-minutes editor */
+.board tr.pickable { cursor: pointer; }
+.board tr.pickable:hover td { background: #11151b; }
+.board tr.pickable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.board tr.open td { background: #11151b; }
+.board tr.edrow td { border-top: 0; padding-top: 0; background: #11151b; white-space: normal; }
+.editor { display: grid; gap: 10px; padding: 6px 10px 16px; }
+.editor .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.editor .lbl { font-size: 13.5px; color: var(--ink-2); }
+.editor input[type=number] { width: 64px; text-align: center; background: var(--bg); color: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 6px; font: inherit; }
+.editor .step { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer; }
+.editor .step:hover { border-color: var(--accent); }
+.editor input[type=range] { flex: 1 1 220px; -webkit-appearance: none; appearance: none; height: 28px; background: transparent; cursor: pointer; }
+.editor input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--line-2); }
+.editor input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line-2); }
+.editor input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--accent); }
+.editor input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg); }
+.editor input:focus-visible, .editor .step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.verdict { margin: 0; font-size: 14px; color: var(--ink-2); padding-left: 12px; border-left: 2px solid var(--line-2); max-width: 80ch; }
+.verdict b { font-weight: 600; }
+.verdict.gone { border-left-color: var(--loss); }
+.verdict.gone > b:not(.ink) { color: var(--loss); }
+.verdict.flip, .verdict.ok { border-left-color: var(--accent); }
+.was { color: var(--muted); }
+.arrow { color: var(--muted); margin: 0 2px; }
+.dec-gone { color: var(--loss); font-weight: 600; }
+.board tr.is-gone .betcell { color: var(--muted); }
+.ink { color: var(--ink); }
+.you { color: var(--accent); }
+.mine { margin: -14px 0 26px; padding: 10px 0 10px 14px; border-left: 2px solid var(--accent); font-size: 14.5px; color: var(--ink-2); }
+.mine .tagline { color: var(--accent); font-weight: 600; margin-right: 6px; }
+.mine b { color: var(--ink); font-weight: 600; }
+a.bklink { text-decoration: none; display: inline-flex; border-radius: 6px; }
+a.bklink img { transition: transform .12s, box-shadow .12s; }
+a.bklink:hover img { transform: scale(1.08); box-shadow: 0 0 0 2px var(--accent); }
+a.bklink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a.bklink .bk:hover { color: var(--ink); }
+.bk .ext { font-size: 12px; color: var(--muted); margin-left: -3px; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.betbtn { display: inline-flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 10px; background: var(--accent); color: #1a1007;
+  font: 600 15px/1 var(--display); text-decoration: none; letter-spacing: -.005em; }
+.betbtn img { width: 22px; height: 22px; border-radius: 5px; }
+.betbtn:hover { filter: brightness(1.08); }
+.betbtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.cta .small { max-width: 46ch; }
+.board .betcell a.bklink img { box-shadow: 0 0 0 1px var(--line-2); }
+.statepick { display: inline-flex; align-items: center; gap: 8px; }
+.statepick select { background: var(--bg); color: var(--ink); border: 1px solid var(--line-2); border-radius: 6px; padding: 4px 6px; font: inherit; }
+/* who's playing */
+.who-game { border-top: 1px solid var(--line); }
+.who-game:last-child { border-bottom: 1px solid var(--line); }
+.who-game summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 12px 0; cursor: pointer; list-style: none; }
+.who-game summary::-webkit-details-marker { display: none; }
+.who-game summary::before { content: '›'; color: var(--muted); width: 10px; transition: transform .15s; display: inline-block; }
+.who-game[open] summary::before { transform: rotate(90deg); }
+.who-game summary .g { font-weight: 600; }
+.who-game summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.who-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 40px; padding: 0 0 16px 24px; }
+@media (max-width: 760px) { .who-teams { grid-template-columns: minmax(0, 1fr); padding-left: 0; } }
+.who-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.who-row.changed .who-name { color: var(--accent); }
+.who-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-st { font-size: 12px; }
+.st-out, .st-doubtful, .st-missed { color: var(--loss); }
+.st-questionable { color: var(--accent); }
+.st-probable { color: var(--muted); }
+.mini-seg { display: inline-flex; padding: 2px; border-radius: 999px; background: #151920; }
+.mini-seg button { border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.mini-seg button[aria-pressed="true"] { background: var(--ink-2); color: var(--bg); }
+.mini-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+footer { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; font-size: 12.5px; color: var(--muted); }
+footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <a class="brand" href="./">Belch <span>Bets</span></a>
+    <div class="controls">
+      <span class="flag" id="flag" hidden>Replay of a past day</span>
+      <div class="seg" role="group" aria-label="View">
+        <button id="v-glance" aria-pressed="true">Glance</button><button id="v-deep" aria-pressed="false">Deep dive</button>
+      </div>
+      <span class="daynav">
+        <button class="icon" id="prev" aria-label="Previous day">‹</button>
+        <button class="textbtn" id="today">Today</button>
+        <button class="icon" id="next" aria-label="Next day">›</button>
+      </span>
+      <a class="textbtn howlink" href="method.html">How it works</a>
+      <button class="updbtn" id="update" type="button" title="Run today's update now">Update now</button>
+    </div>
+  </header>
+
+  <div id="banner"></div>
+  <div class="hero">
+    <div id="pick"></div>
+    <aside class="books-top" id="books-top" hidden>
+      <p class="sub-h">Same bet at each book</p>
+      <table class="books"><thead><tr><th>Book</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody id="books"></tbody></table>
+    </aside>
+  </div>
+  <div id="mine"></div>
+  <div class="season" id="season"></div>
+
+  <div class="deep" id="deep" hidden>
+    <section id="why-sec">
+      <div class="shead"><h2>Why this bet</h2></div>
+      <div class="why-wrap">
+        <p class="sub-h">Projection vs line</p>
+        <div class="strip" id="strip" aria-hidden="true"></div>
+        <p class="why" id="why"></p>
+      </div>
+    </section>
+
+    <section id="who-sec">
+      <div class="shead"><h2>Who's playing</h2><p>Set anyone in or out. The model re-projects the team. <button class="textbtn" id="who-reset" type="button" hidden>Reset lineups</button></p></div>
+      <div id="who"></div>
+    </section>
+
+    <section id="board-sec">
+      <div class="shead"><h2>Edge board</h2><p>Tap a player to change his minutes. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
+      <table class="board">
+        <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+        <thead><tr><th>Player</th><th>Bet</th><th class="r">Edge</th><th>Decision</th></tr></thead>
+        <tbody id="board"></tbody>
+      </table>
+    </section>
+
+    <section id="season-sec">
+      <div class="shead"><h2>Season</h2><p id="season-sub"></p></div>
+      <div class="stats" id="stats"></div>
+      <div class="two">
+        <div>
+          <p class="sub-h">Running profit since opening day, in units</p>
+          <div class="chart" id="chart"></div>
+        </div>
+        <div>
+          <p class="sub-h">Last 10 plays</p>
+          <table><tbody id="recent"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section id="slate-sec">
+      <div class="shead"><h2>Tonight's slate</h2><p id="slate-sub"></p></div>
+      <div class="games" id="games"></div>
+    </section>
+  </div>
+
+  <footer>
+    <span>Picks post around 12:15 PM ET on game days. Results update the next morning. <a href="method.html">How it works</a></span>
+    <span>Bet responsibly. Past results don't guarantee future ones.</span>
+    <label class="statepick" id="state">Your state, for sportsbook links
+      <select id="state-sel" aria-label="Your state"><option value="">Choose</option></select></label>
+  </footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const pct = (v, d = 1) => (v * 100).toFixed(d) + '%';
+const sgn = (v, d = 1) => { const a = Math.abs(v).toFixed(d); return (+a === 0 ? '' : v > 0 ? '+' : '−') + a; };
+const odds = p => (p > 0 ? '+' : '−') + Math.abs(p);
+const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+const short = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cap = s => s === 'UNDER' ? 'Under' : 'Over';
+const LOGO = { DraftKings: 'draftkings', FanDuel: 'fanduel', BetMGM: 'betmgm', Caesars: 'caesars' };
+// Sportsbook links open the bet at that book (bet slip where the book supports it). Caesars needs your state.
+const STATES = ['az','co','ct','dc','ia','il','in','ks','ky','la','ma','md','mi','nc','nh','nj','ny','oh','pa','tn','va','vt','wv','wy'];
+const userState = () => store.get('bb-state') || '';
+// When there's no bet-slip link (demo days, BetMGM, older days) open the book's NBA page instead
+const FALLBACK = { DraftKings: 'https://sportsbook.draftkings.com/leagues/basketball/nba',
+                   FanDuel: 'https://sportsbook.fanduel.com/navigation/nba?tab=player-points',
+                   BetMGM: 'https://sports.{state}.betmgm.com/en/sports/basketball-7/betting/usa-9/nba-6004',
+                   Caesars: 'https://sportsbook.caesars.com/us/{state}/bet/basketball' };
+function betUrl(url) {
+  if (!url) return null;
+  if (!url.includes('{state}')) return url;
+  return userState() ? url.replaceAll('{state}', userState()) : '#state';
+}
+const linkWrap = (url, name, inner) => {
+  const u = betUrl(url || FALLBACK[name]);
+  if (!u) return inner;
+  const ext = u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : '';
+  const tip = u === '#state' ? `Set your state at the bottom of the page to open ${name}`
+    : url ? `Add this bet to your ${name} bet slip` : `Open the ${name} NBA page`;
+  return `<a class="bklink" href="${esc(u)}"${ext} title="${esc(tip)}" data-book>${inner}</a>`;
+};
+const logo = (name, url) => LOGO[name] ? linkWrap(url, name, `<img src="img/${LOGO[name]}.png" alt="${url ? esc(name) : ''}" title="${esc(name)}">`) : '';
+const book = (name, url) => linkWrap(url, name, `<span class="bk">${LOGO[name] ? `<img src="img/${LOGO[name]}.png" alt="">` : ''}${esc(name)}<span class="ext" aria-hidden="true">↗</span></span>`);
+// The pick's call to action: a real button
+function betButton(name, url, side, line) {
+  const u = betUrl(url || FALLBACK[name]);
+  if (!u) return '';
+  const needState = u === '#state', ext = needState ? '' : ' target="_blank" rel="noopener noreferrer"';
+  const label = needState ? `Set your state to bet at ${esc(name)}` : `Bet ${cap(side)} ${line} at ${esc(name)}`;
+  const note = needState ? '' : url ? 'Adds it to your bet slip. Check the price before placing it.'
+    : `Opens the ${esc(name)} NBA page. Find the player there; one-tap bet slip links start with live picks.`;
+  return `<div class="cta"><a class="betbtn" href="${esc(u)}"${ext}>${LOGO[name] ? `<img src="img/${LOGO[name]}.png" alt="">` : ''}${label}<span aria-hidden="true">↗</span></a>${note ? `<span class="small">${note}</span>` : ''}</div>`;
+}
+const settledResult = r => ['win', 'loss', 'void', 'push'].includes(r);
+const cls = v => Math.abs(v) < 0.05 ? '' : v > 0 ? 'pos' : 'neg';
+let DATA = null, DATES = [], LATEST = null;
+
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+async function getJSON(path) {
+  const r = await fetch(path, { cache: 'no-store' });
+  if (!r.ok) throw new Error(path + ' ' + r.status);
+  return r.json();
+}
+
+const ledgerEntry = () => (DATA.record?.ledger || []).find(b => b.date === DATA.date);
+const seasonBets = () => (DATA.record?.ledger || []).filter(b => b.date <= DATA.date);
+
+/* ---------- glance ---------- */
+
+function renderPick() {
+  const p = DATA.pick, replay = (DATA.slate?.odds || '').startsWith('replay');
+  $('flag').hidden = !replay;
+  $('banner').innerHTML = DATA.status === 'error'
+    ? `<div class="banner">Today's update failed. ${esc(DATA.message)} What's shown may be out of date.</div>` : '';
+  if (!p) {
+    const head = DATA.status === 'error' ? 'No pick yet.' : (DATA.games || []).length ? 'No bet today.' : 'No games today.';
+    $('pick').innerHTML = `<div class="pick nobet"><div class="meta">${longDate(DATA.date)}</div>
+      <h1 class="player">${head}</h1><p>${esc(DATA.message || '')}</p></div>`;
+    return;
+  }
+  const L = ledgerEntry(), g = (DATA.games || []).find(x => x.home === p.team || x.away === p.team);
+  let outcome = `<span class="dot" style="background:var(--muted)"></span>Pending, tips at ${g ? esc(g.tip) : 'tonight'}`;
+  if (L && settledResult(L.result)) {
+    const c = L.result === 'win' ? 'var(--win)' : L.result === 'loss' ? 'var(--loss)' : 'var(--muted)';
+    const word = { win: 'Won', loss: 'Lost', void: 'Void, did not play', push: 'Push' }[L.result];
+    outcome = `<span class="dot" style="background:${c}"></span><b style="color:${c}">${word}</b>
+      ${L.points != null ? `<span>scored ${L.points}</span>` : ''}<b class="${cls(L.units)}">${sgn(L.units, 2)}u</b>`;
+  }
+  $('pick').innerHTML = `<div class="pick">
+    <div class="meta">${longDate(DATA.date)} · <b>${esc(p.team)} vs ${esc(p.opp)}</b>${g ? ' · ' + esc(g.tip) : ''}</div>
+    <h1 class="player">${esc(p.player)}</h1>
+    <div class="betline"><span class="side">${cap(p.side)} ${p.line} points</span><span class="price">${odds(p.price)}</span>${book(p.book, p.link)}</div>
+    <div class="figs">
+      <div class="fig"><span class="n accent">${sgn(p.edge * 100)}%</span><span class="k">edge</span></div>
+      <div class="fig"><span class="n">${p.stake}u</span><span class="k">stake</span></div>
+      <div class="fig"><span class="n">${pct(p.p, 0)}</span><span class="k">chance to win</span></div>
+    </div>
+    ${L && settledResult(L.result) && !replay ? '' : betButton(p.book, p.link, p.side, p.line)}
+    <div class="outcome">${outcome}</div>
+  </div>`;
+}
+
+function renderSeasonStrip() {
+  const all = seasonBets(), L = all.filter(b => b.result === 'win' || b.result === 'loss');
+  if (!L.length) { $('season').innerHTML = `<span class="muted" style="font-size:14px">The season record starts with the first settled bet.</span>`; return; }
+  const wins = L.filter(b => b.won).length, units = L.reduce((s, b) => s + b.units, 0);
+  let c = 0; const pts = [0, ...L.map(b => (c += b.units))];
+  const W = 130, H = 26, lo = Math.min(0, ...pts), hi = Math.max(0, ...pts), span = (hi - lo) || 1;
+  const X = i => (i / (pts.length - 1)) * W, Y = v => H - 2 - (v - lo) / span * (H - 4);
+  const spark = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Season profit trend, now ${sgn(units)} units">
+    <line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" stroke="#2a3039" stroke-dasharray="2 3"/>
+    <polyline fill="none" stroke="${Math.abs(units) < 0.05 ? '#b9bfc8' : units > 0 ? '#5cc68c' : '#ee6d64'}" stroke-width="1.6" stroke-linejoin="round"
+      points="${pts.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ')}"/></svg>`;
+  const last10 = all.slice(-10);
+  const form = last10.map(b => `<i class="${b.result === 'win' ? 'w' : b.result === 'loss' ? 'l' : ''}" title="${short(b.date)} · ${esc(b.player)} · ${b.result || 'pending'}"></i>`).join('');
+  $('season').innerHTML = `
+    <div class="fig"><span class="n">${wins}–${L.length - wins}</span><span class="k">season record</span></div>
+    <div class="fig"><span class="n ${cls(units)}">${sgn(units)}u</span><span class="k">season profit</span></div>
+    <div class="fig"><span class="spark">${spark}</span><span class="k">profit trend</span></div>
+    <div class="fig"><span class="form">${form}</span><span class="k">last ${last10.length} bets</span></div>`;
+}
+
+/* ---------- deep dive ---------- */
+
+function renderWhy() {
+  const p = DATA.pick;
+  $('why-sec').hidden = !p;
+  $('books-top').hidden = !p;
+  if (!p) return;
+  const L = ledgerEntry(), fin = L && L.points != null && settledResult(L.result) ? L.points : null;
+  const lo = Math.floor(Math.min(p.proj - p.sigma, p.line - 2, fin ?? 99)), hi = Math.ceil(Math.max(p.proj + p.sigma, p.line + 2, fin ?? 0));
+  const marks = [[p.proj, 'Projection ' + p.proj, 'var(--ink-2)'], [p.line, 'Line ' + p.line, 'var(--accent)']];
+  if (fin != null) marks.push([fin, 'Final ' + fin, L.result === 'win' ? 'var(--win)' : 'var(--loss)']);
+  marks.sort((a, b) => a[0] - b[0]);
+  let lastUp = -1e9;
+  $('strip').innerHTML = '<div class="track"></div>' + marks.map(([v, t, c]) => {
+    const x = (v - lo) / (hi - lo) * 100, down = x - lastUp < 18;
+    if (!down) lastUp = x;
+    return down ? `<div class="mk down" style="left:${x}%;color:${c}"><i></i>${t}</div>` : `<div class="mk up" style="left:${x}%;color:${c}">${t}<i></i></div>`;
+  }).join('');
+  $('why').innerHTML = `Projects <b>${p.proj}</b> points (± ${p.sigma}) vs a <b>${p.line}</b> line.
+    ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.`;
+  const B = p.books || [], best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
+  $('books').innerHTML = B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
+    <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('');
+}
+
+/* ---------- your minutes: re-project any prop in the browser ---------- */
+// new projection = model projection × your minutes ÷ model minutes (tested on 2023-26: best of the formulas tried)
+let OPEN = null;
+const ovKey = () => 'bb-min-' + DATA.date;
+const getOv = () => { try { return JSON.parse(store.get(ovKey()) || '{}'); } catch (e) { return {}; } };
+const setOv = o => store.set(ovKey(), JSON.stringify(o));
+const implied = a => a > 0 ? 100 / (a + 100) : -a / (-a + 100);
+const sdFor = proj => { const m = DATA.model; let i = 0; while (i < m.sd_cuts.length && proj >= m.sd_cuts[i]) i++; return m.sd[i]; };
+const stakeFor = (edge, gp) => {
+  let u = Math.min(1.5, Math.max(0.25, Math.round(edge / DATA.model.avg_edge * 4) / 4));
+  if (edge >= 0.08) u = Math.min(u, 1); if (gp < 20) u = Math.min(u, 0.5); return u;
+};
+const clampMin = v => Math.max(0, Math.min(48, Math.round(v * 2) / 2));
+
+/* ---------- who's playing: your in/out calls, re-projected by the real model (model.js) ---------- */
+let MODEL = null, TEAMS = null;
+const PROJ_CACHE = {};
+const whoKey = () => 'bb-who-' + DATA.date;
+const getWho = () => { try { return JSON.parse(store.get(whoKey()) || '{}'); } catch (e) { return {}; } };
+const setWho = o => store.set(whoKey(), JSON.stringify(o));
+const defaultState = c => c.w >= 1 ? 'out' : c.w > 0 ? 'half' : 'in';
+const STATE_W = { out: 1, half: 0.5, in: 0 };
+
+async function loadModel() {
+  if (!DATA.roster || !window.BBModel) { TEAMS = null; return; }
+  try {
+    if (!MODEL) MODEL = await getJSON('model.json');
+    TEAMS = BBModel.inflate(MODEL, DATA.roster);
+  } catch (e) { TEAMS = null; }
+  for (const k in PROJ_CACHE) delete PROJ_CACHE[k];
+}
+
+// A team's projections with your calls applied (null if you haven't changed anyone on that team)
+function teamWithCalls(team) {
+  const players = TEAMS && TEAMS[team];
+  if (!players) return null;
+  const who = getWho(), changes = players.filter(c => who[c.id] && who[c.id] !== defaultState(c));
+  if (!changes.length) return null;
+  const key = DATA.date + team + JSON.stringify(changes.map(c => [c.id, who[c.id]]));
+  if (!PROJ_CACHE[key]) {
+    const w = Object.fromEntries(players.map(c => [c.id, who[c.id] ? STATE_W[who[c.id]] : c.w]));
+    PROJ_CACHE[key] = BBModel.teamProjections(MODEL, players, w);
+  }
+  return PROJ_CACHE[key];
+}
+
+// Projection and minutes for a prop after your in/out calls. null = you've ruled him out.
+function lineup(x) {
+  const t = teamWithCalls(x.team);
+  if (!t) return { proj: x.proj, min: x.min, changed: false };
+  const r = t[x.id];
+  if (!r) return null;
+  return { proj: Math.max(0, r.points), min: Math.max(0, r.minutes), changed: Math.abs(r.points - x.proj) > 0.005 };
+}
+
+function renderWho() {
+  const sec = $('who-sec'), G = DATA.games || [];
+  sec.hidden = !(TEAMS && G.length && DATA.props);
+  const propIds = new Set((DATA.props || []).map(x => x.id));
+  // listed players, anyone with a prop, and the regular rotation (8+ minutes a game)
+  const W = Object.fromEntries(Object.entries(TEAMS || {}).map(([t, ps]) => [t, ps.filter(c => c.status || propIds.has(c.id) || c.mpg >= 8)]));
+  if (sec.hidden) return;
+  const who = getWho();
+  const label = s => ({ Out: 'Out', Doubtful: 'Doubtful', Questionable: 'Questionable', Probable: 'Probable', 'Missed last game': 'Missed last game' }[s] || '');
+  const ctl = c => {
+    const opts = c.w > 0 && c.w < 1 ? [['out', 'Out'], ['half', '50/50'], ['in', 'Playing']] : [['out', 'Out'], ['in', 'Playing']];
+    const cur = who[c.id] || defaultState(c);
+    return `<span class="mini-seg" role="group" aria-label="${esc(c.name)}">${opts.map(([v, t]) =>
+      `<button type="button" data-id="${c.id}" data-v="${v}" aria-pressed="${cur === v}">${t}</button>`).join('')}</span>`;
+  };
+  const teamBlock = t => {
+    const list = W[t] || [];
+    const ordered = [...list].sort((a, b) => b.ppg - a.ppg);                 // highest scorers first
+    const row = c => `<div class="who-row${who[c.id] && who[c.id] !== defaultState(c) ? ' changed' : ''}">
+      <span class="who-name">${esc(c.name)} <span class="small">${c.ppg} ppg</span></span>
+      <span class="who-st st-${(c.status || 'none').split(' ')[0].toLowerCase()}">${label(c.status)}</span>${ctl(c)}</div>`;
+    return `<div class="who-team"><p class="sub-h">${t}</p>${ordered.map(row).join('')}</div>`;
+  };
+  $('who').innerHTML = G.map(g => {
+    const all = [...(W[g.away] || []), ...(W[g.home] || [])];
+    const q = all.filter(c => c.status === 'Questionable').map(c => esc(c.name));
+    const out = all.filter(c => c.w >= 1).length;
+    const bits = [q.length ? `Questionable: ${q.join(', ')}` : '', out ? `${out} out` : ''].filter(Boolean);
+    const n = all.filter(c => who[c.id] && who[c.id] !== defaultState(c)).length;
+    return `<details class="who-game"${n ? ' open' : ''}><summary><span class="g">${g.away} at ${g.home}</span>
+      <span class="small">${bits.length ? bits.join(' · ') : 'everyone expected to play'}</span>${n ? `<span class="you small">${n} changed</span>` : ''}</summary>
+      <div class="who-teams">${teamBlock(g.away)}${teamBlock(g.home)}</div></details>`;
+  }).join('');
+  $('who').querySelectorAll('.mini-seg button').forEach(b => b.addEventListener('click', () => {
+    const o = getWho(), id = +b.dataset.id, c = Object.values(TEAMS).flat().find(x => x.id === id);
+    if (b.dataset.v === defaultState(c)) delete o[id]; else o[id] = b.dataset.v;
+    setWho(o); OPEN = null; renderWho(); renderBoard(); renderMine();
+  }));
+  $('who-reset').hidden = !Object.keys(who).length;
+}
+
+function score(x, minutes, mine = true) {
+  const m = DATA.model, L = mine ? lineup(x) : { proj: x.proj, min: x.min, changed: false };
+  if (!L) return { ...x, ruledOut: true, adj: false, lineupAdj: true, edge: -1, eo: -1, eu: -1, side: 'UNDER', p: 0,
+                   price: x.under[0], book: x.under[1], link: x.under[2], projAdj: 0, mins: 0, pOver: 0 };
+  const baseMin = L.min, mins = minutes ?? baseMin;
+  const proj = baseMin > 0.5 ? L.proj * mins / baseMin : L.proj;
+  const gap = proj - x.line, sigma = sdFor(proj);
+  const z = Math.log(x.mkt / (1 - x.mkt)) + m.b0 + m.b_gap * gap + m.b_z * gap / sigma;
+  const pOver = 1 / (1 + Math.exp(-z));
+  const eo = pOver - implied(x.over[0]), eu = (1 - pOver) - implied(x.under[0]);
+  const over = eo >= eu;
+  return { ...x, min: Math.round(baseMin * 10) / 10, mins, adj: minutes != null, lineupAdj: L.changed, projAdj: proj, pOver, eo, eu, side: over ? 'OVER' : 'UNDER', edge: Math.max(eo, eu),
+           p: over ? pOver : 1 - pOver, price: over ? x.over[0] : x.under[0], book: over ? x.over[1] : x.under[1],
+           link: over ? x.over[2] : x.under[2] };
+}
+
+// The rule applied with your minutes. Rows keep the model's order so nothing jumps while you adjust.
+function scoredProps() {
+  const ov = getOv();
+  const rows = (DATA.props || []).map(x => {
+    const base = score(x, null, false), mine = score(x, x.id in ov ? ov[x.id] : null);
+    return holdSide({ ...mine, base });
+  });
+  const top = [...rows].sort((a, b) => b.edge - a.edge).find(r => !r.skip && !r.ruledOut && r.edge >= DATA.model.min_edge);
+  rows.forEach(r => {
+    r.play = r.ruledOut ? 'out' : r.skip ? 'skip' : r === top ? 'bet' : 'pass';
+    if (r === top) r.stake = stakeFor(r.edge, r.gp);
+  });
+  rows.sort((a, b) => b.base.edge - a.base.edge);
+  return { rows, top, anyAdj: Object.keys(ov).length > 0 || Object.keys(getWho()).length > 0 };
+}
+
+// If your minutes leave no bettable side, keep showing the model's side so you can see its edge fall away
+function holdSide(r) {
+  if (!(r.adj || r.lineupAdj) || r.ruledOut || r.edge >= DATA.model.min_edge || r.side === r.base.side) return r;
+  const under = r.base.side === 'UNDER';
+  return { ...r, side: r.base.side, edge: under ? r.eu : r.eo, p: under ? 1 - r.pOver : r.pOver,
+           price: under ? r.under[0] : r.over[0], book: under ? r.under[1] : r.over[1], link: under ? r.under[2] : r.over[2] };
+}
+
+const skipWhy = s => s === 'back-to-back' ? 'back-to-back' : (s.match(/\((\w+)\)/) || [, 'injury report'])[1].toLowerCase();
+
+// What your minutes did to this prop, in words
+function verdict(r) {
+  const b = r.base, min = DATA.model.min_edge, dir = r.projAdj > b.proj ? 'up' : 'down';
+  const projTxt = `Projection ${b.proj.toFixed(1)} → <b class="ink">${r.projAdj.toFixed(1)}</b> points against a ${r.line} line.`;
+  if (!r.adj) return { cls: '', html: `Projection ${b.proj.toFixed(1)} points at ${r.min} minutes. Set the minutes you expect, e.g. if he's been named a starter.` };
+  if (r.side !== b.side && r.edge >= min)
+    return { cls: 'flip', html: `${projTxt} The value <b>flips to the ${cap(r.side).toLowerCase()}</b>: ${sgn(r.edge * 100)}% edge at ${odds(r.price)} (${esc(r.book)}).` };
+  if (r.edge < min)
+    return { cls: 'gone', html: `${projTxt} <b>No edge at ${r.mins} minutes.</b> The model's ${sgn(b.edge * 100)}% on the ${cap(b.side).toLowerCase()} assumed ${r.min} minutes; ` +
+      `with your estimate the ${cap(b.side).toLowerCase()} is ${sgn(r.edge * 100)}% and the ${b.side === 'UNDER' ? 'over' : 'under'} ${sgn((b.side === 'UNDER' ? r.eo : r.eu) * 100)}%. Neither clears the 2% needed to bet.` };
+  const ch = r.edge - b.edge;
+  return { cls: 'ok', html: `${projTxt} Still a bettable edge on the ${cap(r.side).toLowerCase()}: ${sgn(r.edge * 100)}% (${ch >= 0 ? 'up' : 'down'} from ${sgn(b.edge * 100)}%).` };
+}
+
+function edgeCell(r, topE) {
+  const bar = `<span class="bar"><i style="width:${Math.max(0, r.edge / topE * 100)}%"></i><span class="t" style="left:${0.02 / topE * 100}%"></span></span>`;
+  if (r.ruledOut) return `<span class="edge muted">–</span>`;
+  if (!(r.adj || r.lineupAdj) || Math.abs(r.edge - r.base.edge) < 0.0005) return `<span class="edge">${sgn(r.edge * 100)}%${bar}</span>`;
+  return `<span class="edge"><s class="was">${sgn(r.base.edge * 100)}%</s><span class="arrow">→</span><b class="${r.edge >= 0.02 ? 'ink' : 'neg'}">${sgn(r.edge * 100)}%</b></span>`;
+}
+
+function decisionCell(r) {
+  if (r.play === 'bet') return `<span class="dec-bet">Bet ${r.stake}u</span>${r.adj ? ' <span class="small why-sub">your minutes</span>' : ''}`;
+  if (r.play === 'out') return `<span class="dec-gone">Out</span> <span class="small why-sub">your call</span>`;
+  if (r.play === 'skip') return `<span class="dec-skip">Skip</span> <span class="small why-sub">${esc(skipWhy(r.skip))}</span>`;
+  if ((r.adj || r.lineupAdj) && r.edge < 0.02 && r.base.edge >= 0.02) return `<span class="dec-gone">No edge</span> <span class="small why-sub">${r.adj ? 'at ' + r.mins + ' min' : 'with your lineup'}</span>`;
+  return `<span class="dec-pass">Pass</span> <span class="small why-sub">${r.edge < 0.02 ? 'under 2%' : 'not top'}</span>`;
+}
+
+function renderBoard() {
+  if (!(DATA.props && DATA.model)) return renderBoardStatic();
+  const { rows, anyAdj } = scoredProps();
+  $('board-sec').hidden = !rows.length;
+  $('board-reset').hidden = !anyAdj;
+  const shown = rows.filter((r, i) => i < 15 || r.adj || r.id === OPEN || r.play === 'bet' || (r.lineupAdj && Math.abs(r.edge - r.base.edge) >= 0.01));
+  const topE = Math.max(...shown.map(r => Math.max(r.edge, r.base.edge)), 0.04);
+  $('board').innerHTML = shown.map(r => {
+    const minTxt = r.ruledOut ? '<span class="you">ruled out by you</span>'
+      : r.adj ? `<span class="you">${r.mins} min (yours, model ${r.min})</span>`
+      : r.lineupAdj ? `<span class="you">${r.min} min · proj ${r.base.projAdj.toFixed(1)} → ${r.projAdj.toFixed(1)} with your lineup</span>` : `${r.min} min`;
+    const sideTxt = r.adj && r.side !== r.base.side ? ` <span class="small">(was ${cap(r.base.side).toLowerCase()})</span>` : '';
+    return `<tr class="is-${r.play}${(r.adj && r.edge < 0.02) || r.ruledOut ? ' is-gone' : ''}${r.ruledOut ? '' : ' pickable'}${r.id === OPEN ? ' open' : ''}" data-id="${r.id}" tabindex="0" aria-expanded="${r.id === OPEN}">
+      <td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp} · ${minTxt}</div></td>
+      <td><span class="betcell">${logo(r.book, r.link)}<span class="bt"><span class="sd"><span class="long">${cap(r.side)}</span><span class="short">${r.side[0]}</span> ${r.line}</span> <span class="pr muted">${odds(r.price)}</span>${sideTxt}</span></span></td>
+      <td class="r edgecol">${edgeCell(r, topE)}</td>
+      <td class="deccol">${decisionCell(r)}</td></tr>` + (r.id === OPEN && !r.ruledOut ? editorRow(r) : '');
+  }).join('');
+  $('board').querySelectorAll('tr.pickable').forEach(tr => {
+    const toggle = () => { const id = +tr.dataset.id; OPEN = OPEN === id ? null : id; renderBoard(); };
+    tr.addEventListener('click', e => { if (!e.target.closest('a')) toggle(); });
+    tr.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+  wireEditor();
+}
+
+function editorRow(r) {
+  const v = verdict(r);
+  return `<tr class="edrow"><td colspan="4"><div class="editor" data-id="${r.id}">
+    <div class="ctl">
+      <span class="lbl">Your minutes</span>
+      <button class="step" type="button" data-d="-1" aria-label="One minute less">−</button>
+      <input type="number" min="0" max="48" step="0.5" value="${r.mins}" aria-label="Minutes for ${esc(r.player)}">
+      <button class="step" type="button" data-d="1" aria-label="One minute more">+</button>
+      <input type="range" min="0" max="44" step="1" value="${r.mins}" aria-label="Minutes slider for ${esc(r.player)}">
+      <span class="small">model ${r.min}</span>
+      <button class="textbtn reset1" type="button">Reset</button>
+    </div>
+    <p class="verdict ${v.cls}">${v.html}</p>
+  </div></td></tr>`;
+}
+
+function wireEditor() {
+  const ed = $('board').querySelector('.editor');
+  if (!ed) return;
+  const id = +ed.dataset.id, x = (DATA.props || []).find(p => p.id === id), lmin = (lineup(x) || { min: x.min }).min;
+  const num = ed.querySelector('input[type=number]'), rng = ed.querySelector('input[type=range]');
+  const tr = $('board').querySelector(`tr.pickable[data-id="${id}"]`);
+  // While dragging: update only this row's numbers (re-rendering would drop the slider mid-drag)
+  const preview = mins => {
+    const lm = (lineup(x) || { min: x.min }).min;
+    let r = { ...score(x, Math.abs(mins - lm) < 0.25 ? null : mins), base: score(x, null, false) };
+    r.adj = Math.abs(mins - lm) >= 0.25;
+    r = holdSide(r);
+    num.value = mins;
+    const v = verdict(r), p = ed.querySelector('.verdict');
+    p.className = 'verdict ' + v.cls; p.innerHTML = v.html;
+    tr.querySelector('.edgecol').innerHTML = edgeCell(r, Math.max(r.edge, r.base.edge, 0.04));
+  };
+  const commit = mins => {
+    const o = getOv(); mins = clampMin(mins);
+    if (Math.abs(mins - lmin) < 0.25) delete o[id]; else o[id] = mins;
+    setOv(o); renderBoard(); renderMine();
+    const again = $('board').querySelector('.editor input[type=range]'); if (again && document.activeElement === document.body) again.focus();
+  };
+  rng.addEventListener('input', e => preview(+e.target.value));
+  rng.addEventListener('change', e => commit(+e.target.value));
+  num.addEventListener('change', e => commit(+e.target.value));
+  ed.querySelectorAll('.step').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); commit(+num.value + +btn.dataset.d); }));
+  ed.querySelector('.reset1').addEventListener('click', e => { e.stopPropagation(); commit(lmin); });
+  ed.addEventListener('click', e => e.stopPropagation());
+}
+
+function renderMine() {
+  const box = $('mine');
+  if (!(DATA.props && DATA.model)) { box.innerHTML = ''; return; }
+  const { rows, top, anyAdj } = scoredProps();
+  if (!anyAdj) { box.innerHTML = ''; return; }
+  const off = DATA.pick, offRow = off && rows.find(r => r.id === off.PLAYER_ID);
+  const same = off && top && top.id === off.PLAYER_ID && top.side === off.side;
+  const newPick = !top ? 'no bet today, nothing clears 2%'
+    : `<b>${esc(top.player)} ${cap(top.side)} ${top.line}</b> ${odds(top.price)} at ${esc(top.book)}, edge ${sgn(top.edge * 100)}%, ${top.stake}u`;
+  let lead = '';
+  if (off && offRow && (offRow.adj || offRow.lineupAdj) && !same) {
+    const why = offRow.adj ? `at ${offRow.mins} minutes` : 'with your lineup';
+    lead = offRow.ruledOut ? `<b>${esc(off.player)}</b> is out (your call). `
+      : offRow.edge < 0.02
+      ? `<b>${esc(off.player)} ${cap(off.side)} ${off.line}</b> has no edge ${why} (${sgn(offRow.base.edge * 100)}% → ${sgn(offRow.edge * 100)}%). `
+      : `<b>${esc(off.player)}</b> drops to ${sgn(offRow.edge * 100)}% ${why}. `;
+  }
+  box.innerHTML = `<div class="mine"><span class="tagline">With your changes</span> ${lead}${same ? 'The pick is unchanged: ' : lead ? 'Best bet instead: ' : 'Best bet: '}${newPick}.
+    <button class="textbtn" id="reset-all" type="button">Clear my changes</button></div>`;
+  $('reset-all').onclick = () => { store.set(ovKey(), '{}'); store.set(whoKey(), '{}'); OPEN = null; renderWho(); renderBoard(); renderMine(); };
+}
+
+function renderBoardStatic() {
+  const B = DATA.board || [];
+  $('board-sec').hidden = !B.length;
+  const top = Math.max(...B.map(r => r.edge), 0.04);
+  $('board').innerHTML = B.map(r => {
+    const dec = r.play === 'bet' ? `<span class="dec-bet">Bet ${r.stake ?? ''}u</span>`
+      : r.play === 'skip' ? `<span class="dec-skip">Skip</span> <span class="small why-sub">${esc(r.why).toLowerCase()}</span>`
+      : `<span class="dec-pass">Pass</span> <span class="small why-sub">${r.edge < 0.02 ? 'under 2%' : 'not top'}</span>`;
+    return `<tr class="is-${r.play}">
+      <td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp}</div></td>
+      <td><span class="betcell">${logo(r.book)}${cap(r.side)} ${r.line} <span class="muted">${odds(r.price)}</span></span></td>
+      <td class="r"><span class="edge">${sgn(r.edge * 100)}%<span class="bar"><i style="width:${Math.max(0, r.edge / top * 100)}%"></i><span class="t" style="left:${0.02 / top * 100}%"></span></span></span></td>
+      <td>${dec}</td></tr>`;
+  }).join('');
+}
+
+function renderSeasonDeep() {
+  const all = seasonBets(), L = all.filter(b => b.result === 'win' || b.result === 'loss');
+  $('recent').innerHTML = all.slice(-10).reverse().map(b => {
+    const r = b.result === 'win' ? '<span class="res win">Won</span>' : b.result === 'loss' ? '<span class="res loss">Lost</span>'
+      : `<span class="res other">${b.result === 'void' ? 'Void' : b.result === 'push' ? 'Push' : 'Pending'}</span>`;
+    const moved = b.clv == null ? '' : b.clv > 0 ? ', line moved our way' : b.clv < 0 ? ', line moved against' : '';
+    return `<tr><td><div class="name">${esc(b.player)} <span class="muted" style="font-weight:400">${cap(b.side)} ${b.line}</span></div>
+      <div class="small">${short(b.date)} · ${odds(b.price)}${b.points != null ? ' · scored ' + b.points : ''}${moved}</div></td>
+      <td class="r">${r}<div class="small ${settledResult(b.result) ? cls(b.units) : ''}">${settledResult(b.result) ? sgn(b.units, 2) + 'u' : ''}</div></td></tr>`;
+  }).join('') || '<tr><td class="muted">No bets yet.</td></tr>';
+  if (!L.length) { $('stats').innerHTML = ''; $('chart').innerHTML = '<p class="muted">Starts after the first settled bet.</p>'; $('season-sub').textContent = ''; return; }
+  const wins = L.filter(b => b.won).length, units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + b.stake, 0);
+  const wc = L.filter(b => b.clv != null), up = wc.filter(b => b.clv > 0).length, dn = wc.filter(b => b.clv < 0).length;
+  $('season-sub').textContent = `${L.length} settled bets since ${short(L[0].date)}`;
+  $('stats').innerHTML = [
+    [`${wins}–${L.length - wins}`, `record, ${pct(wins / L.length, 0)}`, ''],
+    [`${sgn(units)}u`, `profit, ${sgn(units / risked * 100)}% return`, cls(units)],
+    [`${up} / ${dn}`, 'closing line moved for / against us', ''],
+    [`${sgn(L.reduce((s, b) => s + b.edge, 0) / L.length * 100)}%`, 'average edge', ''],
+  ].map(([n, k, c]) => `<div class="fig"><span class="n ${c}">${n}</span><span class="k">${k}</span></div>`).join('');
+  drawChart(L);
+}
+
+function drawChart(L) {
+  const W = 600, H = 250, m = { l: 40, r: 8, t: 10, b: 26 };
+  let c = 0; const pts = [0, ...L.map(b => (c += b.units))], n = pts.length - 1;
+  const ymin = Math.min(0, ...pts), ymax = Math.max(0, ...pts), step = Math.max(1, Math.ceil((ymax - ymin) / 4));
+  const y0 = Math.floor(ymin / step) * step, y1 = Math.max(Math.ceil(ymax / step) * step, y0 + step);
+  const X = i => m.l + (i / n) * (W - m.l - m.r), Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+  let g = '';
+  for (let v = y0; v <= y1; v += step) g += `<line class="${v === 0 ? 'zero' : 'grid'}" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}</text>`;
+  [1, Math.round(n / 2), n].filter((v, i, a) => v >= 1 && a.indexOf(v) === i).forEach(i =>
+    g += `<text class="tick" x="${X(i)}" y="${H - 6}" text-anchor="${i === 1 ? 'start' : i === n ? 'end' : 'middle'}">${short(L[i - 1].date)}</text>`);
+  const line = pts.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' '), area = `${X(0)},${Y(0)} ${line} ${X(n)},${Y(0)}`;
+  const hits = pts.slice(1).map((v, k) => { const i = k + 1, w = (W - m.l - m.r) / n;
+    return `<g data-i="${i}"><rect class="hit" x="${X(i) - w / 2}" y="${m.t}" width="${Math.max(w, 6)}" height="${H - m.t - m.b}"/><line class="guide" x1="${X(i)}" x2="${X(i)}" y1="${m.t}" y2="${H - m.b}"/><circle class="dot" cx="${X(i)}" cy="${Y(v)}" r="4.5" fill="${L[k].result === 'win' ? 'var(--win)' : 'var(--loss)'}"/></g>`; }).join('');
+  $('chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Running season profit over ${n} bets, now ${sgn(pts[n])} units">
+    <defs><clipPath id="ab"><rect width="${W}" height="${Y(0)}"/></clipPath><clipPath id="be"><rect y="${Y(0)}" width="${W}" height="${H}"/></clipPath></defs>
+    ${g}<polygon class="up" points="${area}" clip-path="url(#ab)"/><polygon class="down" points="${area}" clip-path="url(#be)"/><polyline class="line" points="${line}"/>${hits}</svg><div class="tip" hidden></div>`;
+  const svg = $('chart').querySelector('svg'), tip = $('chart').querySelector('.tip');
+  svg.querySelectorAll('g[data-i]').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      const i = +el.dataset.i, b = L[i - 1], s = svg.getBoundingClientRect().width / W;
+      el.classList.add('hover'); tip.hidden = false;
+      tip.innerHTML = `${short(b.date)} · ${esc(b.player)} ${cap(b.side)} ${b.line} · ${b.result === 'win' ? 'won' : 'lost'} ${sgn(b.units, 2)}u<br>Season: <b>${sgn(pts[i])}u</b>`;
+      tip.style.left = X(i) * s + 'px'; tip.style.top = Y(pts[i]) * s + 'px';
+    });
+    el.addEventListener('mouseleave', () => { el.classList.remove('hover'); tip.hidden = true; });
+  });
+}
+
+function renderSlate() {
+  const G = DATA.games || [];
+  $('slate-sec').hidden = !G.length;
+  $('slate-sub').textContent = G.length && DATA.skipped
+    ? `${G.length} games, ${DATA.n_props} props. ${DATA.n_eligible} eligible after skipping ${DATA.skipped.injury} on the injury report and ${DATA.skipped.b2b} on back-to-backs.` : '';
+  $('games').innerHTML = G.map(g => `<div class="game"><span>${g.away} at ${g.home}</span><span>${g.tip}</span></div>`).join('');
+}
+
+/* ---------- update now: starts the cloud run (Cloudflare Worker -> GitHub Actions) ---------- */
+let POLL = null;
+async function api(path, opts) {
+  const r = await fetch(path, { cache: 'no-store', ...opts });
+  let body = {};
+  try { body = await r.json(); } catch (e) {}
+  return { status: r.status, ...body };
+}
+function updState(text, busy, disabled, title) {
+  const b = $('update');
+  b.textContent = text; b.classList.toggle('busy', !!busy); b.disabled = !!disabled;
+  if (title) b.title = title;
+}
+async function watchRun() {
+  clearInterval(POLL);
+  const tick = async () => {
+    const s = await api('api/status');
+    const run = s.run;
+    if (!run || run.status === 'completed') {
+      clearInterval(POLL);
+      const ok = !run || run.conclusion === 'success';
+      updState(ok ? 'Updated' : 'Update failed', false, false, ok ? '' : 'Open the site again for the error details');
+      LATEST = (await getJSON('picks.json')).date;
+      DATES = await getJSON('history/index.json').catch(() => DATES);
+      await show(null);
+      setTimeout(() => updState('Update now', false, false, "Run today's update now"), 8000);
+    } else {
+      const mins = Math.max(0, Math.round((Date.now() - Date.parse(run.started)) / 60000));
+      updState(`Updating… ${mins} min`, true, true, 'Usually takes 3 to 6 minutes');
+    }
+  };
+  await tick();
+  POLL = setInterval(tick, 15000);
+}
+async function setupUpdate() {
+  const b = $('update');
+  if ((location.pathname || '').includes('/demo')) { b.hidden = true; return; }     // the demo is a replay
+  const s = await api('api/status').catch(() => ({ status: 0 }));
+  if (s.status === 403 || s.status === 0 || s.status === 500) {
+    updState('Update now', false, true, s.error || 'Not available yet');
+    return;
+  }
+  if (s.run && s.run.status !== 'completed') watchRun();
+  b.onclick = async () => {
+    updState('Starting…', true, true);
+    const r = await api('api/update', { method: 'POST' });
+    if (r.ok || r.status === 409) return watchRun();
+    updState('Update now', false, false, r.error || 'Could not start');
+    alertLine(r.error || 'Could not start the update.');
+  };
+}
+function alertLine(msg) {
+  $('banner').innerHTML = `<div class="banner">${esc(msg)}</div>`;
+  setTimeout(() => { if (DATA) renderPick(); }, 6000);
+}
+
+/* ---------- view + navigation ---------- */
+
+function setView(v) {
+  const deep = v === 'deep';
+  $('deep').hidden = !deep;
+  document.body.dataset.view = deep ? 'deep' : 'glance';
+  $('v-glance').setAttribute('aria-pressed', String(!deep));
+  $('v-deep').setAttribute('aria-pressed', String(deep));
+  store.set('bb-view', v);
+}
+
+function render() {
+  OPEN = null; renderPick(); renderMine(); renderSeasonStrip(); renderWhy(); renderWho(); renderBoard(); renderSeasonDeep(); renderSlate();
+  const i = DATES.indexOf(DATA.date);
+  $('prev').disabled = i <= 0;
+  $('next').disabled = i < 0 || i >= DATES.length - 1;
+  $('today').disabled = DATA.date === LATEST;
+}
+
+async function show(date) {
+  try {
+    DATA = date && date !== LATEST ? await getJSON(`history/${date}.json`) : await getJSON('picks.json');
+    await loadModel();
+    history.replaceState(null, '', !date || DATA.date === LATEST ? location.pathname + location.search : '#' + date);
+    render();
+  } catch (e) {
+    $('banner').innerHTML = `<div class="banner">Couldn't load the data (${esc(e.message)}).</div>`;
+  }
+}
+
+(async () => {
+  const q = new URLSearchParams(location.search).get('view');
+  setView(q || store.get('bb-view') || 'glance');
+  $('v-glance').onclick = () => setView('glance');
+  $('v-deep').onclick = () => setView('deep');
+  try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
+  try { LATEST = (await getJSON('picks.json')).date; } catch (e) { LATEST = null; }
+  await show(location.hash.slice(1) || null);
+  $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
+  $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);
+  $('today').onclick = () => show(null);
+  const sel = $('state-sel');
+  sel.innerHTML += STATES.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
+  sel.value = userState();
+  sel.onchange = () => { store.set('bb-state', sel.value); render(); };
+  setupUpdate();
+  $('who-reset').onclick = () => { store.set(whoKey(), '{}'); renderWho(); renderBoard(); renderMine(); };
+  $('board-reset').onclick = () => { store.set(ovKey(), '{}'); OPEN = null; renderBoard(); renderMine(); };
+})();
+</script>
+</body>
+</html>

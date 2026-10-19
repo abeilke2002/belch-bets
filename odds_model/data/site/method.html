@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d1117">
+<title>How it works · Belch Bets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --paper: #0b0d10; --card: #0b0d10; --ink: #eceef1; --muted: #7f8794; --rule: #1e232a;
+  --amber: #e8a35c; --amber-soft: #3a2816; --win: #4cc38a; --win-soft: #143222; --loss: #f06b63; --loss-soft: #3a1a19;
+  --slate: #9aa6f0; --slate-soft: #232845;
+  --display: "Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Arial, sans-serif;
+  --body: "Libre Franklin", "Franklin Gothic Book", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 16px/1.6 var(--body); margin: 0; }
+h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: 0.01em; text-wrap: balance; line-height: 1.05; }
+a { color: var(--amber); }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); }
+.topbar .in { max-width: 1180px; margin: 0 auto; padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: baseline; gap: 12px; text-decoration: none; color: var(--ink); }
+.brand b { font: 800 26px/1 var(--display); letter-spacing: 0.02em; text-transform: uppercase; }
+.brand span { color: var(--muted); font-size: 13px; }
+.navlink { font: 600 13px/1 var(--body); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 11px; text-decoration: none; }
+.navlink:hover { border-color: var(--amber); }
+
+.layout { max-width: 1180px; margin: 0 auto; padding-inline: 18px; padding-block: 28px 64px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 20px; } .toc { position: static !important; } }
+.toc { position: sticky; top: 76px; display: grid; gap: 2px; font-size: 14px; }
+.toc .label { margin-bottom: 8px; }
+.toc a { color: var(--muted); text-decoration: none; padding: 5px 0 5px 12px; border-left: 2px solid var(--rule); }
+.toc a:hover { color: var(--ink); border-left-color: var(--amber); }
+@media (max-width: 860px) { .toc { display: flex; flex-wrap: wrap; gap: 6px; } .toc .label { width: 100%; margin: 0; } .toc a { border: 1px solid var(--rule); border-radius: 999px; padding: 5px 10px; background: var(--card); } }
+
+main { display: grid; gap: 44px; min-width: 0; }
+.label { font: 600 11px/1 var(--body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.intro h1 { font-size: clamp(40px, 7vw, 64px); font-weight: 800; text-transform: uppercase; }
+.intro .lede { font-size: 19px; color: var(--muted); max-width: 62ch; margin: 14px 0 0; }
+section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; scroll-margin-top: 80px; }
+section > *, main > * { min-width: 0; }
+main { grid-template-columns: minmax(0, 1fr); }
+section > h2 { font-size: 32px; font-weight: 700; display: flex; gap: 12px; align-items: baseline; }
+section > h2 .step { font: 700 14px/1 var(--mono); color: var(--amber); }
+p { margin: 0; max-width: 70ch; }
+.muted { color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px; display: grid; gap: 12px; }
+.card h3 { font-size: 20px; font-weight: 700; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 68ch; }
+.formula { font: 500 15px/1.7 var(--mono); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; overflow-x: auto; white-space: pre; }
+.formula .c { color: var(--muted); }
+.example { border-left: 3px solid var(--amber); background: var(--amber-soft); border-radius: 0 10px 10px 0; padding: 14px 16px; display: grid; gap: 8px; }
+.example b { font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 8px; text-align: left; border-top: 1px solid var(--rule); }
+th { font: 600 11px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+td.r, th.r { text-align: right; }
+tr.total td { font-weight: 700; }
+.pos { color: var(--win); }
+.tablewrap { overflow-x: auto; }
+dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 18px; }
+@media (max-width: 560px) { dl { grid-template-columns: minmax(0, 1fr); gap: 2px 0; } dd { margin-bottom: 10px !important; } }
+dt { font-weight: 700; }
+dd { margin: 0; color: var(--muted); }
+figure { margin: 0; }
+figure svg { width: 100%; height: auto; display: block; color: var(--ink); }
+figcaption { font-size: 13.5px; color: var(--muted); margin-top: 8px; }
+.flow-wrap { overflow-x: auto; }
+.flow-wrap svg { min-width: 760px; }
+.note { font-size: 14px; color: var(--muted); }
+footer { max-width: 1180px; margin: 0 auto; padding: 14px 18px 40px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--rule); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 18px; }
+
+/* open layout: no boxes, rules between blocks */
+.card { background: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: 16px 0 0; }
+.grid2 .card, .grid3 .card { padding-top: 14px; }
+.intro h1 { text-transform: none; font-weight: 800; letter-spacing: -.02em; }
+section > h2 { font-weight: 700; font-size: 26px; letter-spacing: -.01em; }
+.card h3 { font-weight: 600; font-size: 17px; letter-spacing: -.01em; }
+.label { letter-spacing: 0; text-transform: none; font-size: 13px; font-weight: 500; }
+.brand b { text-transform: none; font: 800 19px/1 var(--display); letter-spacing: -.01em; }
+.brand b span { font: inherit; color: var(--amber); margin: 0; }
+.navlink { background: none; border: 0; color: var(--muted); }
+.navlink:hover { color: var(--ink); }
+.formula { background: none; border: 0; border-left: 2px solid var(--rule); border-radius: 0; padding: 4px 0 4px 16px; }
+.example { background: none; border-radius: 0; padding: 4px 0 4px 16px; }
+.toc a { border-left-color: transparent; }
+.topbar { background: rgba(11, 13, 16, .92); backdrop-filter: blur(8px); }
+section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="in">
+  <a class="brand" href="./"><b>Belch <span>Bets</span></b><span>How it works</span></a>
+  <a class="navlink" href="./">← Back to today's pick</a>
+</div></div>
+
+<div class="layout">
+  <nav class="toc" aria-label="On this page">
+    <span class="label">On this page</span>
+    <a href="#short">The short version</a>
+    <a href="#project">1 · Projection</a>
+    <a href="#probability">2 · Probability</a>
+    <a href="#edge">3 · Edge</a>
+    <a href="#rule">4 · The daily bet</a>
+    <a href="#stake">5 · Stake size</a>
+    <a href="#record">Track record</a>
+    <a href="#limits">What it can't see</a>
+    <a href="#terms">Glossary</a>
+  </nav>
+
+  <main>
+    <div class="intro">
+      <span class="label">Methodology</span>
+      <h1>How a pick is made</h1>
+      <p class="lede">Every game day at noon ET, a model reads the official injury report and the player-points lines at four
+        sportsbooks, then makes at most one bet. This page explains each step, the rule it follows, and how it has done.</p>
+    </div>
+
+    <section id="short">
+      <h2>The short version</h2>
+      <p>Sportsbooks are good at setting lines, so the model doesn't try to out-guess them from scratch. It starts from what the
+        books' prices say, then adjusts a little when its own points projection disagrees with the line. When that adjusted
+        probability beats the best available price by at least 2 percentage points, and the player is in a clean spot, it bets.
+        It only ever takes the single best spot of the day.</p>
+      <figure>
+        <div class="flow-wrap">
+        <svg viewBox="0 0 980 230" role="img" aria-label="Pipeline: box scores and the noon injury report produce a points projection; sportsbook prices produce a market probability; together they give the model's probability, which is compared to the best price to get an edge; filters and a 2 percent minimum leave at most one bet a day.">
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="10" y="20" width="170" height="56" rx="8"/>
+            <rect x="10" y="150" width="170" height="56" rx="8"/>
+            <rect x="240" y="20" width="160" height="56" rx="8"/>
+            <rect x="240" y="150" width="160" height="56" rx="8"/>
+            <rect x="460" y="85" width="150" height="56" rx="8"/>
+            <rect x="670" y="85" width="130" height="56" rx="8"/>
+            <rect x="850" y="85" width="120" height="56" rx="8" stroke="#f0a050" stroke-width="2.5"/>
+            <line x1="180" y1="48" x2="236" y2="48" marker-end="url(#ah)"/>
+            <line x1="180" y1="178" x2="236" y2="178" marker-end="url(#ah)"/>
+            <path d="M400 48 C 430 48, 430 105, 456 105" marker-end="url(#ah)"/>
+            <path d="M400 178 C 430 178, 430 122, 456 122" marker-end="url(#ah)"/>
+            <line x1="610" y1="113" x2="666" y2="113" marker-end="url(#ah)"/>
+            <line x1="800" y1="113" x2="846" y2="113" marker-end="url(#ah)"/>
+          </g>
+          <g fill="currentColor" font-family="Libre Franklin, Helvetica Neue, Arial, sans-serif" font-size="13" text-anchor="middle">
+            <text x="95" y="45" font-weight="700">Box scores</text><text x="95" y="63" font-size="11.5" opacity=".7">+ noon injury report</text>
+            <text x="95" y="175" font-weight="700">Sportsbook lines</text><text x="95" y="193" font-size="11.5" opacity=".7">DK · FD · MGM · Caesars</text>
+            <text x="320" y="45" font-weight="700">Points projection</text><text x="320" y="63" font-size="11.5" opacity=".7">± uncertainty</text>
+            <text x="320" y="175" font-weight="700">Market probability</text><text x="320" y="193" font-size="11.5" opacity=".7">vig removed</text>
+            <text x="535" y="110" font-weight="700">Model probability</text><text x="535" y="128" font-size="11.5" opacity=".7">market, nudged</text>
+            <text x="735" y="110" font-weight="700">Edge</text><text x="735" y="128" font-size="11.5" opacity=".7">vs best price</text>
+            <text x="910" y="110" font-weight="700" fill="#f0a050">One bet</text><text x="910" y="128" font-size="11.5" opacity=".7">if edge ≥ 2%</text>
+          </g>
+          <g fill="currentColor" font-family="Libre Franklin, Helvetica Neue, Arial, sans-serif" font-size="11" opacity=".75">
+            <text x="430" y="40">gap to line</text>
+            <text x="820" y="104" text-anchor="middle">filters</text>
+          </g>
+        </svg>
+        </div>
+        <figcaption>Two independent reads of the same prop, the model's projection and the books' price, combine into one
+          probability. The projection never sees the line; the market enters only at the probability step.</figcaption>
+      </figure>
+    </section>
+
+    <section id="project">
+      <h2><span class="step">01</span> The points projection</h2>
+      <p>The first model predicts how many points each player will score tonight, using only information available before
+        tip-off. It works in two stages, because points depend so heavily on playing time:</p>
+      <div class="grid2">
+        <div class="card"><h3>Minutes</h3>
+          <p class="muted">Predicts tonight's minutes from the player's season and recent minutes, how often he starts, rest,
+            games played, whether he's just back from an absence, and how many shots his missing teammates usually take.</p></div>
+        <div class="card"><h3>Points</h3>
+          <p class="muted">Uses the predicted minutes plus season and recent scoring, shot and free-throw volume, last
+            season's average, starter role, rest, the opponent's defense against his position, and who is out.</p></div>
+      </div>
+      <p><b>Injuries matter most.</b> At noon the model reads the NBA's official injury report. Players listed Out or
+        Doubtful count as missing; Questionable players count as half missing, because they end up playing about half the
+        time. When a teammate is out, the shots he usually takes are shared among the remaining players in proportion to
+        how much each one normally shoots. The model is built so that a teammate sitting can only raise, never lower,
+        another player's projection.</p>
+      <p><b>Uncertainty.</b> Every projection comes with a typical miss (the "±" on the site), measured from how far past
+        projections of the same size landed from the real result. A 25-point projection is less certain than a 6-point one,
+        in points, and the ± reflects that.</p>
+      <p class="note">Both stages are gradient-boosted tree models (LightGBM) trained on every regular-season game since
+        2018-19, and every input is checked to use only games before the one being predicted.</p>
+    </section>
+
+    <section id="probability">
+      <h2><span class="step">02</span> From projection to probability</h2>
+      <p>A projection alone isn't a bet. A projection of 11.5 against a line of 14.5 sounds like a strong under, but the books
+        may know something the box scores don't. So the model starts from the market.</p>
+      <ul>
+        <li><b>The market's view.</b> For each prop, take the over and under prices at each of the four books, remove the
+          books' built-in margin (the "vig"), and use the middle value. That's the market's probability of the over.</li>
+        <li><b>The nudge.</b> Move that probability toward the projection's side, by an amount that depends on how far the
+          projection is from the line, measured in units of its uncertainty.</li>
+      </ul>
+      <div class="formula"><span class="c">// log-odds of the over</span>
+z = ln( P_market / (1 − P_market) )        <span class="c">// the market's view, kept at full weight</span>
+    − 0.036                                <span class="c">// small constant</span>
+    − 0.018 × (projection − line)
+    + 0.347 × (projection − line) / σ      <span class="c">// the projection's pull, scaled by its uncertainty</span>
+
+P_over  = 1 / (1 + e^−z)
+P_under = 1 − P_over</div>
+      <p>The weights are learned from three seasons of real lines and results, with the most recent season counted most
+        (each older season counts half as much as the next). Keeping the market at full weight was a deliberate choice: in
+        testing, letting the model drift further from the market made it overconfident. With this design, the picks it
+        rated at 56% won 56% of the time.</p>
+    </section>
+
+    <section id="edge">
+      <h2><span class="step">03</span> Edge: probability vs price</h2>
+      <p>Every price implies a break-even win rate. At −110 you need to win 52.4% just to break even; at +100, 50%. The edge is
+        the model's probability minus the break-even of the <b>best</b> price on that side across DraftKings, FanDuel,
+        BetMGM and Caesars.</p>
+      <div class="formula">break-even at −110 = 110 / (110 + 100) = 52.4%
+break-even at +105 = 100 / (105 + 100) = 48.8%
+
+edge = P(side) − break-even(best price)</div>
+      <div class="example">
+        <span class="label">Example</span>
+        <p><b>Kawhi Leonard under 24.5</b>, Oct 28, 2025. The model gives the under 55.9%. BetMGM had the best under price at
+          −115 (break-even 53.5%), so the edge is <b>+2.4%</b>. DraftKings at −119 would have been only +1.5%, which is why
+          shopping the four books matters. He scored 18.</p>
+      </div>
+    </section>
+
+    <section id="rule">
+      <h2><span class="step">04</span> The daily bet</h2>
+      <p>Out of every prop on the slate, the rule picks at most one:</p>
+      <div class="grid3">
+        <div class="card"><h3>Skip injury-report players</h3><p class="muted">Anyone listed Probable, Questionable or Doubtful
+          at noon. Their minutes are a coin flip and the lines move late.</p></div>
+        <div class="card"><h3>Skip back-to-backs</h3><p class="muted">Second night of back-to-back games: rest decisions and
+          minute limits make these the least predictable props.</p></div>
+        <div class="card"><h3>Take the top edge, if ≥ 2%</h3><p class="muted">Only the single highest remaining edge, and only if
+          it clears 2%. About 4 days in 10 have no bet.</p></div>
+      </div>
+      <p>Why only one? In testing, the day's second-best pick won about half the time and lost money on its own. The edge
+        is concentrated at the very top of the list.</p>
+    </section>
+
+    <section id="stake">
+      <h2><span class="step">05</span> Stake size</h2>
+      <p>Bigger edges get bigger bets, measured in units (1 unit = your standard bet).</p>
+      <ul>
+        <li><b>Stake = edge ÷ 3.2%</b>, rounded to the nearest quarter unit, between 0.25u and 1.5u. A typical pick's edge is
+          about 3.2%, so the average bet is about 1 unit.</li>
+        <li><b>Capped at 1u when the edge is 8% or more.</b> The biggest edges are usually a fringe player whose line has
+          jumped because the books expect a bigger role. Those still win often enough to bet, but the model overrates them.</li>
+        <li><b>Capped at 0.5u until the player has played 20 games</b> this season, while his averages are still noisy.</li>
+      </ul>
+    </section>
+
+    <section id="record">
+      <h2>Track record so far</h2>
+      <p>This is a backtest: the rule replayed on three past seasons, using only noon information and models that hadn't
+        seen the season being tested (for 2023-24, models trained on the later seasons). It is not live betting.</p>
+      <div class="card tablewrap">
+        <table>
+          <thead><tr><th>Season</th><th class="r">Bets</th><th class="r">Win rate</th><th class="r">Units</th></tr></thead>
+          <tbody>
+            <tr><td>2023-24</td><td class="r">107</td><td class="r">54.2%</td><td class="r pos">+5.0</td></tr>
+            <tr><td>2024-25</td><td class="r">152</td><td class="r">56.6%</td><td class="r pos">+20.4</td></tr>
+            <tr><td>2025-26</td><td class="r">137</td><td class="r">56.9%</td><td class="r pos">+13.7</td></tr>
+            <tr class="total"><td>Total</td><td class="r">396</td><td class="r">56.1%</td><td class="r pos">+39.1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>That's a return of about +11% on money risked. The statistical range is wide, roughly +1% to +21%, so treat it as
+        promising, not proven. The worst losing stretch was about 8 units. The site's season tracker shows the live record,
+        including how often the line moved in our favor before tip-off (closing line value), which is the earliest sign of
+        whether the edge is real.</p>
+    </section>
+
+    <section id="limits">
+      <h2>What the model can't see</h2>
+      <ul>
+        <li><b>News after noon.</b> Late scratches, starting-lineup announcements and minute limits arrive after the pick is
+          made.</li>
+        <li><b>Role changes the box score hasn't shown yet.</b> When a bench player's line jumps because a star is out, the
+          books often know he's moving into the rotation; the model only knows his history. These "fade the jump" bets have
+          been profitable, but the model's confidence in them runs too high, which is what the 8% cap is for.</li>
+        <li><b>The first weeks of a season</b>, when averages rest on a handful of games.</li>
+        <li><b>Anything a sportsbook knows that public data doesn't.</b> That's why the model leans on the market instead of
+          replacing it.</li>
+      </ul>
+    </section>
+
+    <section id="terms">
+      <h2>Glossary</h2>
+      <div class="card">
+        <dl>
+          <dt>Line</dt><dd>The points total the book sets, e.g. 14.5. Over wins at 15+, under at 14 or fewer.</dd>
+          <dt>Price (odds)</dt><dd>American odds. −110 means risk 110 to win 100; +105 means risk 100 to win 105.</dd>
+          <dt>Break-even</dt><dd>The win rate a price needs to make money over time.</dd>
+          <dt>No-vig probability</dt><dd>The books' implied probability with their margin removed, so over and under add to 100%.</dd>
+          <dt>Projection ± σ</dt><dd>The model's expected points, and its typical miss for a projection that size.</dd>
+          <dt>Market P / Model P</dt><dd>The books' probability of the over, and the model's probability of the side it picks.</dd>
+          <dt>Edge</dt><dd>Model probability minus the break-even of the best price. 2% is the minimum to bet.</dd>
+          <dt>Unit (u)</dt><dd>Your standard bet size. Stakes run 0.25u to 1.5u.</dd>
+          <dt>Closing line / CLV</dt><dd>The line right before tip-off. If it moved toward our side (e.g. we took under 14.5 and
+            it closed 13.5), the market came around to our view: a good sign even when a single bet loses.</dd>
+          <dt>Back-to-back</dt><dd>A team's second game on consecutive nights.</dd>
+        </dl>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <span>Belch Bets · picks post around 12:15 PM ET on game days.</span>
+  <span>Bet responsibly. Past results don't guarantee future ones.</span>
+</footer>
+</body>
+</html>

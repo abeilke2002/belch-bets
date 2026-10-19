@@ -1,0 +1,27 @@
+# Only what the daily cloud run needs goes in the repository.
+.DS_Store
+__pycache__/
+*.pyc
+archive/
+odds_raw_backup_*.tar.gz
+
+odds_model/.odds_api_key
+odds_model/.wrangler/
+odds_model/node_modules/
+
+# data/: everything off, then the pieces the daily run reads or writes
+odds_model/data/*
+!odds_model/data/models/
+!odds_model/data/site/
+!odds_model/data/injury_reports/
+!odds_model/data/odds_live/
+!odds_model/data/live/
+!odds_model/data/schedules/
+!odds_model/data/bet_log.csv
+!odds_model/data/pull_log.csv
+!odds_model/data/selected_features.json
+!odds_model/data/odds_lines.parquet
+!odds_model/data/odds_books.parquet
+# injury reports: this season on (older ones only matter to the backtests on the Mac)
+odds_model/data/injury_reports/202[345]-*
+odds_model/data/injury_reports/2026-0*

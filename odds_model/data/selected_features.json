@@ -1,0 +1,73 @@
+{
+  "minutes": [
+    "min_season",
+    "min_5",
+    "min_3",
+    "start_rate",
+    "started_last",
+    "starts_5",
+    "gp",
+    "rest_days",
+    "pts_season",
+    "games_missed_before",
+    "games_since_return",
+    "last_absence_len",
+    "out_fga",
+    "out_fga_share"
+  ],
+  "points": [
+    "pts_season",
+    "fga_season",
+    "fta_season",
+    "pts_5",
+    "pts_3",
+    "fga_5",
+    "fga_3",
+    "fta_5",
+    "pred_minutes",
+    "start_rate",
+    "started_last",
+    "starts_5",
+    "rest_days",
+    "prev_season_ppg",
+    "out_ppg",
+    "out_min",
+    "n_out",
+    "opp_pos_ratio",
+    "opp_total_ratio",
+    "usage_share",
+    "exp_extra_fga_new",
+    "exp_extra_pts_new",
+    "exp_extra_pts_recent"
+  ],
+  "minutes_groups": [
+    "minutes averages",
+    "starter role",
+    "games played",
+    "rest",
+    "scoring level",
+    "return from absence",
+    "usage freed up"
+  ],
+  "points_groups": [
+    "season averages",
+    "recent form",
+    "predicted minutes",
+    "starter role",
+    "rest",
+    "previous season",
+    "teammates out",
+    "opponent defense",
+    "shot redistribution (new absences)"
+  ],
+  "classifier": [
+    "line",
+    "logit_novig",
+    "n_books",
+    "line_spread",
+    "hold"
+  ],
+  "classifier_groups": [
+    "market"
+  ]
+}
