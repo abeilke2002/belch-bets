@@ -53,6 +53,12 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 .textbtn:hover { color: var(--ink); }
 .textbtn:disabled { opacity: .35; cursor: default; }
 .flag { font-size: 12px; color: var(--accent); }
+.updbtn { border: 1px solid var(--line-2); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.updbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.updbtn:disabled { cursor: default; color: var(--muted); }
+.updbtn.busy::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; animation: pulse 1s infinite alternate; }
+@keyframes pulse { from { opacity: .3; } to { opacity: 1; } }
+.updmsg { font-size: 12.5px; color: var(--muted); }
 @media (max-width: 600px) { .controls .howlink { display: none; } .controls { gap: 8px 12px; } }
 
 .banner { margin-top: 20px; padding: 10px 0 10px 14px; border-left: 2px solid var(--loss); color: var(--loss); font-size: 14px; }
@@ -277,6 +283,7 @@ footer a { color: var(--ink-2); }
         <button class="icon" id="next" aria-label="Next day">›</button>
       </span>
       <a class="textbtn howlink" href="method.html">How it works</a>
+      <button class="updbtn" id="update" type="button" title="Run today's update now">Update now</button>
     </div>
   </header>
 
@@ -820,6 +827,62 @@ function renderSlate() {
   $('games').innerHTML = G.map(g => `<div class="game"><span>${g.away} at ${g.home}</span><span>${g.tip}</span></div>`).join('');
 }
 
+/* ---------- update now: starts the cloud run (Cloudflare Worker -> GitHub Actions) ---------- */
+let POLL = null;
+async function api(path, opts) {
+  const r = await fetch(path, { cache: 'no-store', ...opts });
+  let body = {};
+  try { body = await r.json(); } catch (e) {}
+  return { status: r.status, ...body };
+}
+function updState(text, busy, disabled, title) {
+  const b = $('update');
+  b.textContent = text; b.classList.toggle('busy', !!busy); b.disabled = !!disabled;
+  if (title) b.title = title;
+}
+async function watchRun() {
+  clearInterval(POLL);
+  const tick = async () => {
+    const s = await api('api/status');
+    const run = s.run;
+    if (!run || run.status === 'completed') {
+      clearInterval(POLL);
+      const ok = !run || run.conclusion === 'success';
+      updState(ok ? 'Updated' : 'Update failed', false, false, ok ? '' : 'Open the site again for the error details');
+      LATEST = (await getJSON('picks.json')).date;
+      DATES = await getJSON('history/index.json').catch(() => DATES);
+      await show(null);
+      setTimeout(() => updState('Update now', false, false, "Run today's update now"), 8000);
+    } else {
+      const mins = Math.max(0, Math.round((Date.now() - Date.parse(run.started)) / 60000));
+      updState(`Updating… ${mins} min`, true, true, 'Usually takes 3 to 6 minutes');
+    }
+  };
+  await tick();
+  POLL = setInterval(tick, 15000);
+}
+async function setupUpdate() {
+  const b = $('update');
+  if ((location.pathname || '').includes('/demo')) { b.hidden = true; return; }     // the demo is a replay
+  const s = await api('api/status').catch(() => ({ status: 0 }));
+  if (s.status === 403 || s.status === 0 || s.status === 500) {
+    updState('Update now', false, true, s.error || 'Not available yet');
+    return;
+  }
+  if (s.run && s.run.status !== 'completed') watchRun();
+  b.onclick = async () => {
+    updState('Starting…', true, true);
+    const r = await api('api/update', { method: 'POST' });
+    if (r.ok || r.status === 409) return watchRun();
+    updState('Update now', false, false, r.error || 'Could not start');
+    alertLine(r.error || 'Could not start the update.');
+  };
+}
+function alertLine(msg) {
+  $('banner').innerHTML = `<div class="banner">${esc(msg)}</div>`;
+  setTimeout(() => { if (DATA) renderPick(); }, 6000);
+}
+
 /* ---------- view + navigation ---------- */
 
 function setView(v) {
@@ -865,6 +928,7 @@ async function show(date) {
   sel.innerHTML += STATES.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
   sel.value = userState();
   sel.onchange = () => { store.set('bb-state', sel.value); render(); };
+  setupUpdate();
   $('who-reset').onclick = () => { store.set(whoKey(), '{}'); renderWho(); renderBoard(); renderMine(); };
   $('board-reset').onclick = () => { store.set(ovKey(), '{}'); OPEN = null; renderBoard(); renderMine(); };
 })();
