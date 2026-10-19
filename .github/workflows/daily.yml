@@ -18,6 +18,10 @@ on:
         default: picks
         type: choice
         options: [picks, close, results]
+      args:
+        description: extra arguments for testing, e.g. --replay --date 2026-03-30 --no-deploy
+        required: false
+        default: ''
 
 concurrency:
   group: belch-bets-pipeline            # one run at a time; a second one waits
@@ -64,8 +68,8 @@ jobs:
         run: python build_features.py > /dev/null
       - name: Run the pipeline
         run: |
-          if [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20
-          else python daily_pipeline.py ${{ steps.mode.outputs.mode }}; fi
+          if [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20 ${{ inputs.args }}
+          else python daily_pipeline.py ${{ steps.mode.outputs.mode }} ${{ inputs.args }}; fi
       - name: Save the day's data
         if: always()
         working-directory: .
