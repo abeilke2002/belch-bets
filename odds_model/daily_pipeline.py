@@ -19,6 +19,7 @@ picks.json and show a Mac notification.
 """
 import argparse
 import datetime as dt
+import functools
 import json
 from pathlib import Path
 import os
@@ -226,7 +227,7 @@ def run_picks(day, paths, replay, now):
 
     p = board.loc[pick_idx]
     bet = {'date': str(day), 'player': p['player_name'], 'PLAYER_ID': int(p['PLAYER_ID']), 'team': abbr(p['team']),
-           'opponent': abbr(TEAM_NAMES.get(p['OPP_ID'], '')), 'event_id': p.get('event_id'),
+           'opponent': abbr(team_names().get(p['OPP_ID'], '')), 'event_id': p.get('event_id'),
            'commence_time': p.get('commence_time'), 'side': p['side'], 'line': float(p['early_line']),
            'price': int(p['price']), 'book': BOOK_NAMES.get(p['book'], p['book']), 'p_side': round(float(p['p_side']), 4),
            'edge': round(float(p['edge']), 4), 'stake': float(p['stake'])}
@@ -247,8 +248,15 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
              'Pelicans': 'NOP', 'Knicks': 'NYK', 'Thunder': 'OKC', 'Magic': 'ORL', '76ers': 'PHI', 'Suns': 'PHX',
              'Trail Blazers': 'POR', 'Kings': 'SAC', 'Spurs': 'SAS', 'Raptors': 'TOR', 'Jazz': 'UTA', 'Wizards': 'WAS'}
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
-TEAM_NAMES = pd.read_parquet(DATA / 'player_games.parquet', columns=['TEAM_ID', 'teamName']) \
-    .drop_duplicates('TEAM_ID').set_index('TEAM_ID')['teamName'].to_dict()
+
+
+@functools.cache
+def team_names():
+    """TEAM_ID -> name, from the box scores. Read on first use: close runs skip build_features, so the file isn't there."""
+    return pd.read_parquet(DATA / 'player_games.parquet', columns=['TEAM_ID', 'teamName']) \
+        .drop_duplicates('TEAM_ID').set_index('TEAM_ID')['teamName'].to_dict()
+
+
 abbr = lambda name: TEAM_ABBR.get(name, name)
 
 
@@ -256,7 +264,7 @@ def row_payload(r):
     """One prop as the website shows it."""
     kind, _, why = r['play'].partition(': ')
     kind = 'bet' if kind.startswith('BET') else kind
-    return {'player': r['player_name'], 'team': abbr(r['team']), 'opp': abbr(TEAM_NAMES.get(r['OPP_ID'], '')),
+    return {'player': r['player_name'], 'team': abbr(r['team']), 'opp': abbr(team_names().get(r['OPP_ID'], '')),
             'side': r['side'], 'line': float(r['early_line']), 'price': int(r['price']),
             'book': BOOK_NAMES.get(r['book'], r['book']), 'mkt': round(float(r['early_novig_over']), 4),
             'proj': round(float(r['pred_points']), 1), 'sigma': round(float(r['pred_sd']), 1),
@@ -277,7 +285,7 @@ def props_payload(board):
     out = []
     for _, r in board.iterrows():
         out.append({'player': r['player_name'], 'id': int(r['PLAYER_ID']), 'team': abbr(r['team']),
-                    'opp': abbr(TEAM_NAMES.get(r['OPP_ID'], '')), 'line': float(r['early_line']),
+                    'opp': abbr(team_names().get(r['OPP_ID'], '')), 'line': float(r['early_line']),
                     'mkt': round(float(r['early_novig_over']), 4), 'proj': round(float(r['pred_points']), 2),
                     'min': round(float(r['pred_minutes']), 1), 'gp': int(r['gp']), 'skip': r['skip'],
                     'season': round(float(r['pts_season']), 1),
@@ -376,7 +384,7 @@ def slate_payload(schedule, board, f, status, sources, unmatched, odds_note, gam
         props = board[board['TEAM_ID'].isin([home, away])]
         tip = props['commence_time'].dropna()
         t = pd.Timestamp(tip.iloc[0]).tz_convert(ET) if len(tip) else None
-        gm.append({'home': abbr(TEAM_NAMES.get(home, '')), 'away': abbr(TEAM_NAMES.get(away, '')),
+        gm.append({'home': abbr(team_names().get(home, '')), 'away': abbr(team_names().get(away, '')),
                    'tip': t.strftime('%-I:%M %p ET') if t is not None else '', 't': t.isoformat() if t is not None else '',
                    'props': int(len(props))})
     gm.sort(key=lambda x: x['t'])
