@@ -864,6 +864,8 @@ async function watchRun() {
 async function setupUpdate() {
   const b = $('update');
   if ((location.pathname || '').includes('/demo')) { b.hidden = true; return; }     // the demo is a replay
+  const me = await api('api/me').catch(() => ({}));
+  if (!me.owner) { b.hidden = true; return; }                                         // owners only
   const s = await api('api/status').catch(() => ({ status: 0 }));
   if (s.status === 403 || s.status === 0 || s.status === 500) {
     updState('Update now', false, true, s.error || 'Not available yet');
