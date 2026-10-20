@@ -7,7 +7,7 @@
   "main": "worker.js",
   // Owners can press "Update now" (comma-separated). ACCESS_*: the Cloudflare Access login in front of the site.
   "vars": {
-    "OWNERS": "aidanbeilke1@gmail.com",
+    "OWNERS": "aidanbeilke1@gmail.com,adamgraham12341@gmail.com",
     "ACCESS_TEAM": "lingering-hat-fa76.cloudflareaccess.com",
     "ACCESS_AUD": "851d4d943eead16a8811cd1e4d457cfa01646f7e014880462fef3b7e87ca67b7"
   },
