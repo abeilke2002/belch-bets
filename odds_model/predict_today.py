@@ -142,6 +142,9 @@ def features_as_of(games, day, schedule, out_names, out_weights=None, keep_out=F
         print(f'warning: --out names not found among this season\'s players: {sorted(missing)}')
 
     f = f.merge(add_opponent(schedule), on='TEAM_ID')    # keep only teams playing that day
+    if f.empty:                                          # early in a season: only other teams have played
+        raise ValueError(f'No one playing on {day} has played a {season} game yet, so there is no '
+                         f'current-season history to predict from.')
     f = f.merge(load_positions(), on='PLAYER_ID', how='left')
     f['season'], f['GAME_DATE'] = season, pd.Timestamp(day)
     # Absence features: append tonight's game to the season history and reuse the training code
