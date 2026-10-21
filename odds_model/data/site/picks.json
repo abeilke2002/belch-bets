@@ -1,8 +1,8 @@
 {
- "date": "2026-10-20",
- "updated": "2026-10-20 04:39 PM ET",
+ "date": "2026-10-21",
+ "updated": "2026-10-21 04:40 PM ET",
  "status": "ok",
- "message": "No 2026-27 regular-season games before 2026-10-20 yet, so there is no current-season history to predict from.",
+ "message": "Input data must be 2 dimensional and non empty.",
  "pick": null,
  "board": [],
  "injuries": [],
