@@ -324,7 +324,7 @@ footer a { color: var(--ink-2); }
     </section>
 
     <section id="board-sec">
-      <div class="shead"><h2>Edge board</h2><p>Tap a player to change his minutes. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
+      <div class="shead"><h2>Edge board</h2><p>Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
       <table class="board">
         <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
         <thead><tr><th>Player</th><th>Bet</th><th class="r">Edge</th><th>Decision</th></tr></thead>
@@ -512,10 +512,13 @@ function renderWhy() {
 }
 
 // Profit boost: the winnings are multiplied by (1 + boost). −114 pays 0.877 per unit; +50% makes it 1.316, i.e. +132.
+// One boost setting, shared by "Why this bet" and the edge board's player panel.
+const BOOSTS = [0, 0.25, 0.3, 0.5];
 let BOOST = 0;
 const payout = a => a > 0 ? a / 100 : 100 / -a;
 const boosted = (a, b) => { const w = payout(a) * (1 + b); return w >= 1 ? Math.round(w * 100) : -Math.round(100 / w); };
-document.querySelectorAll('#boost button').forEach(btn => btn.addEventListener('click', () => { BOOST = +btn.dataset.b; renderWhy(); }));
+const setBoost = b => { BOOST = b; renderWhy(); renderBoard(); };
+document.querySelectorAll('#boost button').forEach(btn => btn.addEventListener('click', () => setBoost(+btn.dataset.b)));
 
 /* ---------- your minutes: re-project any prop in the browser ---------- */
 // new projection = model projection × your minutes ÷ model minutes (tested on 2023-26: best of the formulas tried)
@@ -723,7 +726,28 @@ function editorRow(r) {
       <button class="textbtn reset1" type="button">Reset</button>
     </div>
     <p class="verdict ${v.cls}">${v.html}</p>
+    <div class="ctl">
+      <span class="lbl">Profit boost</span>
+      <div class="seg bseg" role="group" aria-label="Profit boost for ${esc(r.player)}">
+        ${BOOSTS.map(b => `<button type="button" data-b="${b}" aria-pressed="${b === BOOST}">${b ? b * 100 + '%' : 'None'}</button>`).join('')}
+      </div>
+    </div>
+    ${BOOST ? boostVerdict(r) : ''}
   </div></td></tr>`;
+}
+
+// Display only: the boosted price and edge for this prop. The board, the pick and the record ignore boosts.
+function boostVerdict(r) {
+  const side = (s, p, [price, bk]) => {
+    const bp = boosted(price, BOOST);
+    return { s, p, price, bp, bk, e0: p - implied(price), e: p - implied(bp), ev: p * payout(bp) - (1 - p) };
+  };
+  const o = side('OVER', r.pOver, r.over), u = side('UNDER', 1 - r.pOver, r.under), b = o.e >= u.e ? o : u;
+  const clears = b.e >= DATA.model.min_edge;
+  return `<p class="verdict ${clears ? 'ok' : 'gone'}">With a ${BOOST * 100}% boost on the ${cap(b.s).toLowerCase()} ${r.line},
+    ${odds(b.price)} at ${esc(b.bk)} becomes <b class="ink">${odds(b.bp)}</b>: edge <b class="${clears ? 'pos' : 'neg'}">${sgn(b.e * 100)}%</b>
+    (from ${sgn(b.e0 * 100)}%), about <b>${sgn(b.ev, 2)}u</b> expected per 1u bet. ${clears ? 'That clears the 2% bar.' : 'Still under the 2% bar.'}
+    <span class="small">Books round boosted odds differently; check your slip.</span></p>`;
 }
 
 function wireEditor() {
@@ -754,6 +778,7 @@ function wireEditor() {
   num.addEventListener('change', e => commit(+e.target.value));
   ed.querySelectorAll('.step').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); commit(+num.value + +btn.dataset.d); }));
   ed.querySelector('.reset1').addEventListener('click', e => { e.stopPropagation(); commit(lmin); });
+  ed.querySelectorAll('.bseg button').forEach(btn => btn.addEventListener('click', () => setBoost(+btn.dataset.b)));
   ed.addEventListener('click', e => e.stopPropagation());
 }
 
