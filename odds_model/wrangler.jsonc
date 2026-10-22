@@ -5,6 +5,8 @@
   // Static site: the daily pipeline writes data/site (index.html, picks.json, history/) and runs `wrangler deploy`.
   // worker.js answers /api/* (the "Update now" button); everything else is served straight from the files.
   "main": "worker.js",
+  // 12:15 PM ET picks run: 16:15 UTC in EDT, 17:15 UTC in EST; worker.js keeps whichever is 12:15 in New York
+  "triggers": { "crons": ["15 16 * * *", "15 17 * * *"] },
   // Owners can press "Update now" (comma-separated). ACCESS_*: the Cloudflare Access login in front of the site.
   "vars": {
     "OWNERS": "aidanbeilke1@gmail.com,adamgraham12341@gmail.com",

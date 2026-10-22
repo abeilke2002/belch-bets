@@ -2,6 +2,7 @@
 //   POST /api/update  starts the picks run on GitHub Actions (workflow_dispatch)
 //   GET  /api/status  the latest run's state, so the page can show progress
 //   GET  /api/me      who is logged in and whether they're an owner (the page hides the button otherwise)
+// It also starts the picks run itself at 12:15 PM ET every day (scheduled(), crons in wrangler.jsonc).
 // Updates are owner-only (vars.OWNERS in wrangler.jsonc). All of it requires Cloudflare Access (the approved-emails login): without it anyone could start runs and spend
 // Odds API credits. Secret GITHUB_TOKEN: a fine-grained token limited to Actions on the belch-bets repo.
 const REPO = 'abeilke2002/belch-bets', WORKFLOW = 'daily.yml';
@@ -68,10 +69,25 @@ export default {
         return json({ ok: false, error: 'An update is already running.', run }, 409);
       if (run && Date.now() - Date.parse(run.started) < 5 * 60 * 1000)
         return json({ ok: false, error: 'An update finished in the last 5 minutes. Try again shortly.', run }, 429);
-      const r = await gh(env, `/actions/workflows/${WORKFLOW}/dispatches`, {
-        method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode: 'picks' } }) });
+      const r = await dispatchPicks(env);
       return r.status === 204 ? json({ ok: true }) : json({ ok: false, error: `GitHub said ${r.status}` }, 502);
     }
     return json({ ok: false, error: 'not found' }, 404);
   },
+
+  // The daily 12:15 PM ET picks run (crons in wrangler.jsonc). GitHub's own schedule starts hours late; a
+  // dispatch starts within a minute. Cron times are UTC, so both 16:15 and 17:15 fire and only the one that
+  // is 12:15 in New York (EDT or EST) dispatches.
+  async scheduled(controller, env, ctx) {
+    const hour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
+      .format(new Date(controller.scheduledTime));
+    if (Number(hour) !== 12) return;
+    const r = await dispatchPicks(env);
+    if (r.status !== 204) throw new Error(`picks dispatch: GitHub said ${r.status}`);
+  },
 };
+
+function dispatchPicks(env) {
+  return gh(env, `/actions/workflows/${WORKFLOW}/dispatches`, {
+    method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode: 'picks' } }) });
+}
