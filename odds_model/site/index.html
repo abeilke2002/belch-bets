@@ -193,6 +193,33 @@ tr.is-bet .edge .bar i { background: var(--accent); }
 .res { font-weight: 600; font-size: 13px; }
 .res.win { color: var(--win); } .res.loss { color: var(--loss); } .res.other { color: var(--muted); font-weight: 500; }
 
+/* History tab: one card per season, then that season's chart and every play by month */
+body[data-view="history"] :is(.hero, #mine, #season, #banner, .daynav, #flag) { display: none !important; }
+.scards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; padding-block: 30px 6px; }
+.scard { text-align: left; border: 1px solid var(--line-2); background: transparent; border-radius: 12px; padding: 14px 16px; cursor: pointer; display: grid; gap: 4px; }
+.scard:hover { border-color: var(--muted); }
+.scard[aria-pressed="true"] { border-color: var(--accent); background: #11151b; }
+.scard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scard .sn { font: 600 15px/1.2 var(--display); }
+.scard .tag { font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.scard .tag.live { color: var(--accent); }
+.scard .u { font: 700 26px/1.1 var(--display); letter-spacing: -.01em; }
+.scard .k { font-size: 13px; color: var(--muted); }
+.hist section { padding-block: 26px; display: grid; gap: 18px; min-width: 0; }
+.hist h2 { font: 700 20px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
+.hist .chart { max-width: 680px; }
+.month { border-top: 1px solid var(--line); }
+.month summary { display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; cursor: pointer; list-style: none; font-weight: 500; }
+.month summary::-webkit-details-marker { display: none; }
+.month summary::before { content: '›'; color: var(--muted); margin-right: 10px; display: inline-block; transition: transform .15s; }
+.month[open] summary::before { transform: rotate(90deg); }
+.month summary .t { flex: 1; }
+.month summary .m { color: var(--muted); font-weight: 400; font-size: 13.5px; }
+.month table { margin-bottom: 12px; }
+.plays tr.go { cursor: pointer; }
+.plays tr.go:hover td { background: #11151b; }
+.plays td.d { width: 64px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+
 .games { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0 40px; }
 .game { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .game span:last-child { color: var(--muted); }
@@ -278,7 +305,7 @@ footer a { color: var(--ink-2); }
     <div class="controls">
       <span class="flag" id="flag" hidden>Replay of a past day</span>
       <div class="seg" role="group" aria-label="View">
-        <button id="v-glance" aria-pressed="true">Glance</button><button id="v-deep" aria-pressed="false">Deep dive</button>
+        <button id="v-glance" aria-pressed="true">Glance</button><button id="v-deep" aria-pressed="false">Deep dive</button><button id="v-history" aria-pressed="false">History</button>
       </div>
       <span class="daynav">
         <button class="icon" id="prev" aria-label="Previous day">‹</button>
@@ -350,6 +377,16 @@ footer a { color: var(--ink-2); }
     <section id="slate-sec">
       <div class="shead"><h2>Tonight's slate</h2><p id="slate-sub"></p></div>
       <div class="games" id="games"></div>
+    </section>
+  </div>
+
+  <div class="hist" id="hist" hidden>
+    <div class="scards" id="scards" role="group" aria-label="Season"></div>
+    <section>
+      <div class="shead"><h2 id="h-title"></h2><p id="h-note"></p></div>
+      <div class="stats" id="h-stats"></div>
+      <div class="chart" id="h-chart"></div>
+      <div id="h-plays"></div>
     </section>
   </div>
 
@@ -843,7 +880,7 @@ function renderSeasonDeep() {
   drawChart(L);
 }
 
-function drawChart(L) {
+function drawChart(L, box = $('chart')) {
   const W = 600, H = 250, m = { l: 40, r: 8, t: 10, b: 26 };
   let c = 0; const pts = [0, ...L.map(b => (c += b.units))], n = pts.length - 1;
   const ymin = Math.min(0, ...pts), ymax = Math.max(0, ...pts), step = Math.max(1, Math.ceil((ymax - ymin) / 4));
@@ -856,10 +893,11 @@ function drawChart(L) {
   const line = pts.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' '), area = `${X(0)},${Y(0)} ${line} ${X(n)},${Y(0)}`;
   const hits = pts.slice(1).map((v, k) => { const i = k + 1, w = (W - m.l - m.r) / n;
     return `<g data-i="${i}"><rect class="hit" x="${X(i) - w / 2}" y="${m.t}" width="${Math.max(w, 6)}" height="${H - m.t - m.b}"/><line class="guide" x1="${X(i)}" x2="${X(i)}" y1="${m.t}" y2="${H - m.b}"/><circle class="dot" cx="${X(i)}" cy="${Y(v)}" r="4.5" fill="${L[k].result === 'win' ? 'var(--win)' : 'var(--loss)'}"/></g>`; }).join('');
-  $('chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Running season profit over ${n} bets, now ${sgn(pts[n])} units">
-    <defs><clipPath id="ab"><rect width="${W}" height="${Y(0)}"/></clipPath><clipPath id="be"><rect y="${Y(0)}" width="${W}" height="${H}"/></clipPath></defs>
-    ${g}<polygon class="up" points="${area}" clip-path="url(#ab)"/><polygon class="down" points="${area}" clip-path="url(#be)"/><polyline class="line" points="${line}"/>${hits}</svg><div class="tip" hidden></div>`;
-  const svg = $('chart').querySelector('svg'), tip = $('chart').querySelector('.tip');
+  const ab = box.id + '-ab', be = box.id + '-be';                 // clip ids unique per chart
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Running season profit over ${n} bets, now ${sgn(pts[n])} units">
+    <defs><clipPath id="${ab}"><rect width="${W}" height="${Y(0)}"/></clipPath><clipPath id="${be}"><rect y="${Y(0)}" width="${W}" height="${H}"/></clipPath></defs>
+    ${g}<polygon class="up" points="${area}" clip-path="url(#${ab})"/><polygon class="down" points="${area}" clip-path="url(#${be})"/><polyline class="line" points="${line}"/>${hits}</svg><div class="tip" hidden></div>`;
+  const svg = box.querySelector('svg'), tip = box.querySelector('.tip');
   svg.querySelectorAll('g[data-i]').forEach(el => {
     el.addEventListener('mouseenter', () => {
       const i = +el.dataset.i, b = L[i - 1], s = svg.getBoundingClientRect().width / W;
@@ -869,6 +907,68 @@ function drawChart(L) {
     });
     el.addEventListener('mouseleave', () => { el.classList.remove('hover'); tip.hidden = true; });
   });
+}
+
+/* ---------- history: units by season, every play (live season from picks.json, past ones from seasons.json) ---------- */
+let SEASONS = null, HSEL = null;
+const seasonOf = d => { const [y, m] = d.split('-').map(Number), s = m >= 8 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, '0')}`; };
+const TAGS = { live: 'Live', replay: 'Replay backtest', backtest: 'Backtest' };
+function seasonSum(bets) {
+  const L = bets.filter(b => b.result === 'win' || b.result === 'loss'), wins = L.filter(b => b.result === 'win').length;
+  const units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + b.stake, 0);
+  return { L, wins, losses: L.length - wins, units, roi: risked ? units / risked : 0 };
+}
+
+async function renderHistory() {
+  if (!SEASONS) {
+    const past = (await getJSON('seasons.json').catch(() => ({ seasons: [] }))).seasons;
+    let live = [];
+    try { live = (await getJSON('picks.json')).record?.ledger || []; } catch (e) {}
+    SEASONS = [{ season: seasonOf(LATEST || new Date().toISOString().slice(0, 10)), kind: 'live',
+                 note: 'Live: the picks the site posted, at the noon price.', bets: live }, ...past]
+      .map(s => ({ ...s, bets: [...s.bets].sort((a, b) => a.date.localeCompare(b.date)) }));
+    HSEL = HSEL || SEASONS[0].season;
+  }
+  $('scards').innerHTML = SEASONS.map(s => {
+    const t = seasonSum(s.bets);
+    return `<button class="scard" type="button" data-s="${s.season}" aria-pressed="${s.season === HSEL}">
+      <span class="tag ${s.kind}">${TAGS[s.kind]}</span><span class="sn">${s.season}</span>
+      <span class="u ${t.L.length ? cls(t.units) : 'muted'}">${t.L.length ? sgn(t.units) + 'u' : '–'}</span>
+      <span class="k">${t.L.length ? `${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% return` : 'no settled plays yet'}</span></button>`;
+  }).join('');
+  $('scards').querySelectorAll('.scard').forEach(b => b.onclick = () => { HSEL = b.dataset.s; renderHistory(); });
+
+  const s = SEASONS.find(x => x.season === HSEL), t = seasonSum(s.bets);
+  $('h-title').textContent = `${s.season} · ${TAGS[s.kind]}`;
+  $('h-note').textContent = s.note;
+  $('h-stats').innerHTML = t.L.length ? [
+    [`${sgn(t.units)}u`, 'profit', cls(t.units)], [`${t.wins}–${t.losses}`, `record, ${pct(t.wins / t.L.length, 0)}`, ''],
+    [`${sgn(t.roi * 100)}%`, 'return on units risked', ''], [`${s.bets.length}`, 'plays', ''],
+  ].map(([n, k, c]) => `<div class="fig"><span class="n ${c}">${n}</span><span class="k">${k}</span></div>`).join('') : '';
+  if (t.L.length) drawChart(t.L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled play.</p>';
+
+  const months = {};
+  [...s.bets].reverse().forEach(b => (months[b.date.slice(0, 7)] ||= []).push(b));
+  $('h-plays').innerHTML = Object.entries(months).map(([m, bets], i) => {
+    const u = bets.reduce((a, b) => a + (settledResult(b.result) ? b.units : 0), 0), w = bets.filter(b => b.result === 'win').length;
+    const l = bets.filter(b => b.result === 'loss').length;
+    const name = new Date(m + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return `<details class="month"${i === 0 ? ' open' : ''}><summary><span class="t">${name}</span>
+      <span class="m">${w}–${l} · <span class="${cls(u)}">${sgn(u, 2)}u</span></span></summary>
+      <table class="plays"><tbody>${bets.map(b => histRow(b, s.kind === 'live' && DATES.includes(b.date))).join('')}</tbody></table></details>`;
+  }).join('') || '<p class="muted">No plays yet this season.</p>';
+  $('h-plays').querySelectorAll('tr.go').forEach(tr => tr.onclick = () => { setView('deep'); show(tr.dataset.date); scrollTo(0, 0); });
+}
+
+function histRow(b, link) {
+  const r = b.result === 'win' ? '<span class="res win">Won</span>' : b.result === 'loss' ? '<span class="res loss">Lost</span>'
+    : `<span class="res other">${b.result === 'void' ? 'Void' : b.result === 'push' ? 'Push' : 'Pending'}</span>`;
+  const opp = b.opp ?? b.opponent;
+  return `<tr${link ? ` class="go" data-date="${b.date}" title="Open this day"` : ''}>
+    <td class="d">${short(b.date)}</td>
+    <td><div class="name">${esc(b.player)} <span class="muted" style="font-weight:400">${cap(b.side)} ${b.line}</span></div>
+      <div class="small">${esc(b.team)} vs ${esc(opp)} · ${odds(b.price)} ${esc(b.book)} · ${b.stake}u${b.points != null ? ' · scored ' + b.points : ''}</div></td>
+    <td class="r">${r}<div class="small ${settledResult(b.result) ? cls(b.units) : ''}">${settledResult(b.result) ? sgn(b.units, 2) + 'u' : ''}</div></td></tr>`;
 }
 
 function renderSlate() {
@@ -903,7 +1003,9 @@ async function watchRun() {
       updState(ok ? 'Updated' : 'Update failed', false, false, ok ? '' : 'Open the site again for the error details');
       LATEST = (await getJSON('picks.json')).date;
       DATES = await getJSON('history/index.json').catch(() => DATES);
+      SEASONS = null;                                   // the live season's ledger just changed
       await show(null);
+      if (document.body.dataset.view === 'history') renderHistory();
       setTimeout(() => updState('Update now', false, false, "Run today's update now"), 8000);
     } else {
       const mins = Math.max(0, Math.round((Date.now() - Date.parse(run.started)) / 60000));
@@ -940,12 +1042,13 @@ function alertLine(msg) {
 /* ---------- view + navigation ---------- */
 
 function setView(v) {
-  const deep = v === 'deep';
-  $('deep').hidden = !deep;
-  document.body.dataset.view = deep ? 'deep' : 'glance';
-  $('v-glance').setAttribute('aria-pressed', String(!deep));
-  $('v-deep').setAttribute('aria-pressed', String(deep));
+  if (!['glance', 'deep', 'history'].includes(v)) v = 'glance';
+  $('deep').hidden = v !== 'deep';
+  $('hist').hidden = v !== 'history';
+  document.body.dataset.view = v;
+  ['glance', 'deep', 'history'].forEach(k => $('v-' + k).setAttribute('aria-pressed', String(k === v)));
   store.set('bb-view', v);
+  if (v === 'history') renderHistory();
 }
 
 function render() {
@@ -972,9 +1075,11 @@ async function show(date) {
   setView(q || store.get('bb-view') || 'glance');
   $('v-glance').onclick = () => setView('glance');
   $('v-deep').onclick = () => setView('deep');
+  $('v-history').onclick = () => setView('history');
   try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
   try { LATEST = (await getJSON('picks.json')).date; } catch (e) { LATEST = null; }
   await show(location.hash.slice(1) || null);
+  if (document.body.dataset.view === 'history') { SEASONS = null; renderHistory(); }   // now that LATEST and DATES are known
   $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
   $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);
   $('today').onclick = () => show(null);

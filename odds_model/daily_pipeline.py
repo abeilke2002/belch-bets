@@ -501,8 +501,8 @@ def write_site(paths, site):
 
 
 def copy_pages(paths):
-    """The site's pages and sportsbook logos (from site/) into the published folder."""
-    for page in [*(ROOT / 'site').glob('*.html'), ROOT / 'site' / 'model.js']:
+    """The site's pages, past seasons (build_history.py) and sportsbook logos (from site/) into the published folder."""
+    for page in [*(ROOT / 'site').glob('*.html'), ROOT / 'site' / 'model.js', ROOT / 'site' / 'seasons.json']:
         shutil.copy(page, paths.site / page.name)
     shutil.copytree(ROOT / 'site' / 'img', paths.site / 'img', dirs_exist_ok=True)
 
