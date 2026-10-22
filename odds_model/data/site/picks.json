@@ -1,6 +1,6 @@
 {
  "date": "2026-10-22",
- "updated": "2026-10-22 12:16 PM ET",
+ "updated": "2026-10-22 04:35 PM ET",
  "status": "ok",
  "message": "No bet today: the best eligible edge is +0.8%, below the 2% minimum.",
  "pick": null,
@@ -304,7 +304,7 @@
   }
  ],
  "slate": {
-  "odds": "2 games, 2 new snapshots, credits left 25232",
+  "odds": "2 games, 0 new snapshots, credits left 25232",
   "injury_info": {
    "noon report": 2,
    "previous game": 2
