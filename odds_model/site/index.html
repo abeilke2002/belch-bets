@@ -132,6 +132,9 @@ th:last-child, td:last-child { padding-right: 0; }
 .strip .mk.up { top: 0; }
 .strip .mk.down { top: 17px; }
 .why { margin: 0; color: var(--ink-2); max-width: 62ch; font-size: 14.5px; }
+.boost { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 16px; }
+.boost .sub-h { margin: 0; }
+#boost-out { margin-top: 10px; }
 
 .books td { color: var(--ink-2); }
 .books tr.best td { color: var(--ink); }
@@ -305,6 +308,13 @@ footer a { color: var(--ink-2); }
         <p class="sub-h">Projection vs line</p>
         <div class="strip" id="strip" aria-hidden="true"></div>
         <p class="why" id="why"></p>
+        <div class="boost">
+          <span class="sub-h">Profit boost</span>
+          <div class="seg" id="boost" role="group" aria-label="Profit boost">
+            <button data-b="0" aria-pressed="true">None</button><button data-b="0.25" aria-pressed="false">25%</button><button data-b="0.3" aria-pressed="false">30%</button><button data-b="0.5" aria-pressed="false">50%</button>
+          </div>
+        </div>
+        <p class="why" id="boost-out" hidden></p>
       </div>
     </section>
 
@@ -485,10 +495,27 @@ function renderWhy() {
   }).join('');
   $('why').innerHTML = `Projects <b>${p.proj}</b> points (± ${p.sigma}) vs a <b>${p.line}</b> line.
     ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.`;
-  const B = p.books || [], best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
+  document.querySelectorAll('#boost button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.b === BOOST));
+  $('boost-out').hidden = !BOOST;
+  if (BOOST) {
+    const bp = boosted(p.price, BOOST), e = p.p - implied(bp), ev = p.p * payout(bp) - (1 - p.p);
+    $('boost-out').innerHTML = `With a ${BOOST * 100}% profit boost, ${odds(p.price)} becomes <b>${odds(bp)}</b>, which needs ${pct(implied(bp), 0)}.
+      Edge <b class="${e >= 0.02 ? 'pos' : 'neg'}">${sgn(e * 100)}%</b> (from ${sgn(p.edge * 100)}%), about <b>${sgn(ev, 2)}u</b> expected per 1u bet.
+      <span class="small">Books round boosted odds differently; check the price on your slip.</span>`;
+  }
+  // With a boost picked, the table shows each book's boosted price and edge (the boost is at whichever book you have it)
+  const B = (p.books || []).map(b => !BOOST || b.edge === null ? b : { ...b, price: boosted(b.price, BOOST), edge: p.p - implied(boosted(b.price, BOOST)) });
+  const best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
+  $('books-top').querySelector('.sub-h').textContent = BOOST ? `Same bet at each book, with a ${BOOST * 100}% boost` : 'Same bet at each book';
   $('books').innerHTML = B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
     <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('');
 }
+
+// Profit boost: the winnings are multiplied by (1 + boost). −114 pays 0.877 per unit; +50% makes it 1.316, i.e. +132.
+let BOOST = 0;
+const payout = a => a > 0 ? a / 100 : 100 / -a;
+const boosted = (a, b) => { const w = payout(a) * (1 + b); return w >= 1 ? Math.round(w * 100) : -Math.round(100 / w); };
+document.querySelectorAll('#boost button').forEach(btn => btn.addEventListener('click', () => { BOOST = +btn.dataset.b; renderWhy(); }));
 
 /* ---------- your minutes: re-project any prop in the browser ---------- */
 // new projection = model projection × your minutes ÷ model minutes (tested on 2023-26: best of the formulas tried)
