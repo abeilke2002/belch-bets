@@ -1,8 +1,8 @@
 {
  "date": "2026-10-23",
- "updated": "2026-10-23 04:30 PM ET",
- "status": "error",
- "message": "The picks update failed at 04:30 PM ET: FileNotFoundError: [Errno 2] No such file or directory: 'osascript'",
+ "updated": "2026-10-23 07:22 PM ET",
+ "status": "ok",
+ "message": "",
  "pick": {
   "date": "2026-10-23",
   "player": "Tari Eason",
@@ -542,7 +542,7 @@
   }
  ],
  "slate": {
-  "odds": "11 games, 0 new snapshots, credits left 25220",
+  "odds": "6 games, 0 new snapshots, credits left 25220",
   "injury_info": {
    "noon report": 23,
    "previous game": 1
