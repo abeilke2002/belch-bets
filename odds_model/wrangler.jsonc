@@ -3,20 +3,15 @@
   "name": "belch-bets",
   "compatibility_date": "2026-10-12",
   // Static site: the daily pipeline writes data/site (index.html, picks.json, history/) and runs `wrangler deploy`.
-  // worker.js answers /api/* (the "Update now" button); everything else is served straight from the files.
+  // worker.js runs first on every request (the private-link check), then serves the files.
+  // Secrets (wrangler secret put): VIEW_KEY, the private link's key; GITHUB_TOKEN, for the 12:15 cron.
   "main": "worker.js",
   // 12:15 PM ET picks run: 16:15 UTC in EDT, 17:15 UTC in EST; worker.js keeps whichever is 12:15 in New York
   "triggers": { "crons": ["15 16 * * *", "15 17 * * *"] },
-  // Owners can press "Update now" (comma-separated). ACCESS_*: the Cloudflare Access login in front of the site.
-  "vars": {
-    "OWNERS": "aidanbeilke1@gmail.com,adamgraham12341@gmail.com",
-    "ACCESS_TEAM": "lingering-hat-fa76.cloudflareaccess.com",
-    "ACCESS_AUD": "851d4d943eead16a8811cd1e4d457cfa01646f7e014880462fef3b7e87ca67b7"
-  },
   "assets": {
     "directory": "data/site",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": true
   }
 }

@@ -1,93 +1,53 @@
-// The site's Worker: serves the static pages (data/site) and two small endpoints for the "Update now" button.
-//   POST /api/update  starts the picks run on GitHub Actions (workflow_dispatch)
-//   GET  /api/status  the latest run's state, so the page can show progress
-//   GET  /api/me      who is logged in and whether they're an owner (the page hides the button otherwise)
-// It also starts the picks run itself at 12:15 PM ET every day (scheduled(), crons in wrangler.jsonc).
-// Updates are owner-only (vars.OWNERS in wrangler.jsonc). All of it requires Cloudflare Access (the approved-emails login): without it anyone could start runs and spend
-// Odds API credits. Secret GITHUB_TOKEN: a fine-grained token limited to Actions on the belch-bets repo.
+// The site's Worker: serves the static pages (data/site) to anyone with the private link, and starts the daily
+// picks run at 12:15 PM ET (scheduled(), crons in wrangler.jsonc).
+//
+// Private link: https://<site>/?k=<VIEW_KEY>. Opening it sets a cookie for 400 days (the browser maximum) and
+// redirects to the plain address, so later visits from that browser just work. Without the key or the cookie
+// the site shows a short "private" page. Secrets: VIEW_KEY (the link key), GITHUB_TOKEN (a fine-grained token
+// limited to Actions on the belch-bets repo, for the cron).
 const REPO = 'abeilke2002/belch-bets', WORKFLOW = 'daily.yml';
+const COOKIE = 'bb_key', MAX_AGE = 400 * 24 * 3600;
 
-// Who is logged in: verify Cloudflare Access's signed token (cf-access-jwt-assertion) against the team's
-// public keys and this application's audience tag, then read the email from it. Plain headers can't fake this.
-let CERTS = null;
-const b64 = x => Uint8Array.from(atob(x.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - x.length % 4) % 4)),
-                                 c => c.charCodeAt(0));
-async function accessEmail(request, env) {
-  const jwt = request.headers.get('cf-access-jwt-assertion');
-  if (!jwt || !env.ACCESS_TEAM || !env.ACCESS_AUD) return null;
-  const [h, p, sig] = jwt.split('.');
-  if (!sig) return null;
-  const head = JSON.parse(new TextDecoder().decode(b64(h)));
-  const claims = JSON.parse(new TextDecoder().decode(b64(p)));
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (!CERTS) CERTS = (await (await fetch(`https://${env.ACCESS_TEAM}/cdn-cgi/access/certs`)).json()).keys || [];
-    const jwk = CERTS.find(k => k.kid === head.kid);
-    if (!jwk) { CERTS = null; continue; }                // keys rotated: refetch once
-    const key = await crypto.subtle.importKey('jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
-    const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64(sig), new TextEncoder().encode(`${h}.${p}`));
-    const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-    if (!ok || claims.exp * 1000 < Date.now() || !aud.includes(env.ACCESS_AUD)) return null;
-    return String(claims.email || '').toLowerCase() || null;
-  }
-  return null;
-}
-const isOwner = (email, env) => !!email && String(env.OWNERS || '').toLowerCase().split(',').map(s => s.trim()).includes(email);
+const hasCookie = (request, key) =>
+  (request.headers.get('cookie') || '').split(';').some(c => c.trim() === `${COOKIE}=${key}`);
 
-const json = (body, status = 200) => new Response(JSON.stringify(body), {
-  status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-
-async function gh(env, path, init = {}) {
-  return fetch(`https://api.github.com/repos/${REPO}${path}`, { ...init, headers: {
-    authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json',
-    'x-github-api-version': '2022-11-28', 'user-agent': 'belch-bets-worker', ...(init.headers || {}) } });
-}
-
-async function latestRun(env) {
-  const r = await gh(env, `/actions/workflows/${WORKFLOW}/runs?per_page=1`);
-  if (!r.ok) return null;
-  const run = (await r.json()).workflow_runs?.[0];
-  return run && { id: run.id, status: run.status, conclusion: run.conclusion, started: run.run_started_at,
-                  updated: run.updated_at, event: run.event, url: run.html_url };
-}
+const PRIVATE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Belch Bets</title><style>body{background:#0b0d10;color:#b9bfc8;font:15px/1.5 -apple-system,Helvetica,Arial,sans-serif;
+display:grid;place-items:center;min-height:100vh;margin:0;padding:0 16px;text-align:center}b{color:#eceef1}</style></head>
+<body><p><b>This site is private.</b><br>Open it with the link you were sent.</p></body></html>`;
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    const url = new URL(request.url), key = env.VIEW_KEY;
+    if (!key) return new Response('VIEW_KEY is not set on the Worker.', { status: 500 });
 
-    const email = await accessEmail(request, env);
-    if (url.pathname === '/api/me') return json({ ok: true, email, owner: isOwner(email, env) });
-    if (!email) return json({ ok: false, error: 'Log in through the site first (Cloudflare Access).' }, 403);
-    if (!isOwner(email, env)) return json({ ok: false, error: 'Only the site owner can run updates.' }, 403);
-    if (!env.GITHUB_TOKEN) return json({ ok: false, error: 'GITHUB_TOKEN is not set on the Worker.' }, 500);
-
-    if (url.pathname === '/api/status') return json({ ok: true, run: await latestRun(env) });
-
-    if (url.pathname === '/api/update' && request.method === 'POST') {
-      const run = await latestRun(env);
-      if (run && run.status !== 'completed')
-        return json({ ok: false, error: 'An update is already running.', run }, 409);
-      if (run && Date.now() - Date.parse(run.started) < 5 * 60 * 1000)
-        return json({ ok: false, error: 'An update finished in the last 5 minutes. Try again shortly.', run }, 429);
-      const r = await dispatchPicks(env);
-      return r.status === 204 ? json({ ok: true }) : json({ ok: false, error: `GitHub said ${r.status}` }, 502);
+    if (url.searchParams.get('k') === key) {               // the private link: remember this browser, then clean the URL
+      url.searchParams.delete('k');
+      return new Response(null, { status: 302, headers: {
+        location: url.pathname + url.search,
+        'set-cookie': `${COOKIE}=${key}; Max-Age=${MAX_AGE}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+        'cache-control': 'no-store' } });
     }
-    return json({ ok: false, error: 'not found' }, 404);
+    if (!hasCookie(request, key))
+      return new Response(PRIVATE, { status: 403, headers: { 'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
+
+    const res = await env.ASSETS.fetch(request);
+    const out = new Response(res.body, res);
+    out.headers.set('x-robots-tag', 'noindex');
+    return out;
   },
 
-  // The daily 12:15 PM ET picks run (crons in wrangler.jsonc). GitHub's own schedule starts hours late; a
-  // dispatch starts within a minute. Cron times are UTC, so both 16:15 and 17:15 fire and only the one that
-  // is 12:15 in New York (EDT or EST) dispatches.
+  // The daily 12:15 PM ET picks run. GitHub's own schedule starts hours late; a dispatch starts within a minute.
+  // Cron times are UTC, so both 16:15 and 17:15 fire and only the one that is 12:15 in New York (EDT or EST) dispatches.
   async scheduled(controller, env, ctx) {
     const hour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
       .format(new Date(controller.scheduledTime));
     if (Number(hour) !== 12) return;
-    const r = await dispatchPicks(env);
+    const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
+      method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode: 'picks' } }),
+      headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json',
+                 'x-github-api-version': '2022-11-28', 'user-agent': 'belch-bets-worker' } });
     if (r.status !== 204) throw new Error(`picks dispatch: GitHub said ${r.status}`);
   },
 };
-
-function dispatchPicks(env) {
-  return gh(env, `/actions/workflows/${WORKFLOW}/dispatches`, {
-    method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode: 'picks' } }) });
-}
