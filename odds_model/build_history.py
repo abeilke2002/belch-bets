@@ -2,17 +2,20 @@
 
     python build_history.py
 
-2025-26: the day-by-day replay of the live pipeline (data/replay/bet_log.csv), the site's own rules and stakes.
-2024-25: the out-of-sample noon backtest (data/noon_backtest_scored.parquet, noon injury report, gap-only
-classifier): each day's biggest edge if it clears 2%, flat 1u, DNPs void. The live season comes from picks.json.
-Past seasons don't change, so this only needs rerunning if the replay or backtest is rebuilt.
+Out-of-sample backtest of the current method (calibration_test.py's "market fixed + recent-weighted" classifier):
+each season is predicted by a classifier trained only on earlier seasons, on noon lines and the noon injury report.
+The site's rule each day: skip players on the injury report or a back-to-back, bet the biggest edge if it clears 2%,
+stake = edge / 3.2% (rounded to 0.25u, 0.25-1.5u, max 1u above an 8% edge, max 0.5u before 20 games played).
+The live season comes from picks.json. Rerun if the projections or the classifier are rebuilt.
 """
 import json
 
 import numpy as np
 import pandas as pd
 
+import calibration_test as ct
 from config import DATA, ROOT
+from parse_odds import american_to_prob
 
 TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 'Bulls': 'CHI', 'Cavaliers': 'CLE',
              'Mavericks': 'DAL', 'Nuggets': 'DEN', 'Pistons': 'DET', 'Warriors': 'GSW', 'Rockets': 'HOU', 'Pacers': 'IND',
@@ -20,52 +23,61 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
              'Pelicans': 'NOP', 'Knicks': 'NYK', 'Thunder': 'OKC', 'Magic': 'ORL', '76ers': 'PHI', 'Suns': 'PHX',
              'Trail Blazers': 'POR', 'Kings': 'SAC', 'Spurs': 'SAS', 'Raptors': 'TOR', 'Jazz': 'UTA', 'Wizards': 'WAS'}
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
-COLS = ['date', 'player', 'team', 'opponent', 'side', 'line', 'price', 'book', 'stake', 'result', 'points', 'units']
+PLAN = [('2024-25', ['2023-24']), ('2025-26', ['2023-24', '2024-25'])]
+AVG_EDGE = 0.0323                                   # the site's stake scale (over_model.pkl avg_top_edge)
 abbr = lambda full: next((a for nick, a in TEAM_ABBR.items() if str(full).endswith(nick)), str(full))
 
 
-def replay_2025_26():
-    b = pd.read_csv(DATA / 'replay' / 'bet_log.csv')
-    return b[COLS]
+def dataset():
+    """Noon props with the noon projection and injury status, as calibration_test.py builds them."""
+    rep = pd.read_parquet(DATA / 'noon_injuries.parquet')[['GAME_ID', 'PLAYER_ID', 'status']] \
+        .drop_duplicates(['GAME_ID', 'PLAYER_ID'])
+    d = ct.build_dataset(DATA).drop(columns=['pred_points']).merge(
+        pd.read_parquet(DATA / 'noon_projections_half.parquet')[['PLAYER_ID', 'GAME_ID', 'pred']],
+        on=['PLAYER_ID', 'GAME_ID']).merge(rep, on=['GAME_ID', 'PLAYER_ID'], how='left')
+    return d.assign(gap=d['pred'] - d['line'], gapz=(d['pred'] - d['line']) / d['pred_sd'])
 
 
-def backtest_2024_25():
-    d = pd.read_parquet(DATA / 'noon_backtest_scored.parquet')
-    d = d[(d['variant'] == 'noon injury report | gap only') & (d['season'] == '2024-25') & (d['edge'] >= 0.02)].copy()
-    d['date'] = pd.to_datetime(d['commence_time']).dt.tz_convert('America/New_York').dt.date.astype(str)
-    d = d.sort_values('edge', ascending=False).groupby('date').head(1).sort_values('date')
-    over = d['side_over'].astype(bool)
-    price = np.where(over, d['early_best_over_price'], d['early_best_under_price']).astype(int)
-    bk = np.where(over, d['early_best_over_book'], d['early_best_under_book'])
-    win = np.where(over, d['points'] > d['line'], d['points'] < d['line'])
-    result = np.where(~d['played'].astype(bool), 'void', np.where(d['points'] == d['line'], 'push', np.where(win, 'win', 'loss')))
+def site_stake(edge, gp):
+    u = np.clip(np.round(edge / AVG_EDGE * 4) / 4, 0.25, 1.5)
+    u = np.where(edge >= 0.08, np.minimum(u, 1), u)
+    return np.where(gp < 20, np.minimum(u, 0.5), u)
+
+
+def season_bets(d, test, train):
+    tr, te = d[d['season'].isin(train)].reset_index(drop=True), d[d['season'] == test].copy()
+    te['p'] = ct.sig(ct.fit_market_fixed(tr, w=ct.season_weights(tr))(te))
+    eo = te['p'] - american_to_prob(te['early_best_over_price'])
+    eu = (1 - te['p']) - american_to_prob(te['early_best_under_price'])
+    te['over_side'], te['edge'] = eo >= eu, np.maximum(eo, eu)
+    el = te[~te['status'].isin(['Probable', 'Questionable', 'Doubtful']) & (te['rest_days'] != 1)]
+    b = el.sort_values('edge', ascending=False).drop_duplicates('GAME_DATE')
+    b = b[b['edge'] >= 0.02].sort_values('GAME_DATE')
+    over = b['over_side'].values
+    price = np.where(over, b['early_best_over_price'], b['early_best_under_price']).astype(int)
+    win = np.where(over, b['points'] > b['line'], b['points'] < b['line'])
+    stake = site_stake(b['edge'].values, b['gp'].values)
     profit = np.where(price > 0, price / 100, 100 / -price)
-    home = d['home_team'].map(abbr).values
-    team = d['teamName'].map(TEAM_ABBR).fillna(d['teamName']).values
+    team = b['teamName'].map(TEAM_ABBR).fillna(b['teamName']).values
+    home = b['home_team'].map(abbr).values
     return pd.DataFrame({
-        'date': d['date'].values, 'player': d['player_name'].values, 'team': team,
-        'opponent': np.where(team == home, d['away_team'].map(abbr).values, home),
-        'side': np.where(over, 'OVER', 'UNDER'), 'line': d['line'].values, 'price': price,
-        'book': [BOOK_NAMES.get(x, x) for x in bk], 'stake': 1.0, 'result': result,
-        'points': np.where(d['played'].astype(bool), d['points'], np.nan),
-        'units': np.round(np.where(result == 'win', profit, np.where(result == 'loss', -1.0, 0.0)), 2)})
+        'date': pd.to_datetime(b['GAME_DATE']).dt.date.astype(str).values, 'player': b['player_name'].values,
+        'team': team, 'opponent': np.where(team == home, b['away_team'].map(abbr).values, home),
+        'side': np.where(over, 'OVER', 'UNDER'), 'line': b['line'].values, 'price': price,
+        'book': [BOOK_NAMES.get(x, x) for x in np.where(over, b['early_best_over_book'], b['early_best_under_book'])],
+        'stake': stake, 'result': np.where(win, 'win', 'loss'), 'points': b['points'].values,
+        'units': np.round(np.where(win, profit, -1.0) * stake, 2)})
 
 
 def main():
-    seasons = [
-        {'season': '2025-26', 'kind': 'replay',
-         'note': "Replay: the site's own code run day by day on 2025-26, same rules and stake sizes. Its over/under "
-                 'model was fit on data through April 2026, so it had seen this season.',
-         'bets': replay_2025_26()},
-        {'season': '2024-25', 'kind': 'backtest',
-         'note': "Backtest: models trained only on earlier seasons, noon injury report, the day's biggest edge if "
-                 "it cleared 2%, flat 1u stakes (the site's stake sizing didn't exist yet).",
-         'bets': backtest_2024_25()},
-    ]
-    for s in seasons:
-        s['bets'] = json.loads(s['bets'].to_json(orient='records'))
-        n, u = len(s['bets']), sum(b['units'] or 0 for b in s['bets'])
-        print(f"{s['season']}: {n} plays, {u:+.2f}u")
+    d = dataset()
+    seasons = []
+    for test, train in reversed(PLAN):
+        bets = season_bets(d, test, train)
+        print(f'{test}: {len(bets)} plays, {bets["units"].sum():+.2f}u on {bets["stake"].sum():.1f}u risked')
+        seasons.append({'season': test, 'kind': 'backtest', 'bets': json.loads(bets.to_json(orient='records')),
+                        'note': f'Backtest, out of sample: the current method with a model trained only on '
+                                f'{" and ".join(train)}, noon lines and injury report, the site\'s pick and stake rules.'})
     (ROOT / 'site' / 'seasons.json').write_text(json.dumps({'seasons': seasons}, separators=(',', ':')))
 
 
