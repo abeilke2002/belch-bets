@@ -142,7 +142,8 @@ th:last-child, td:last-child { padding-right: 0; }
 
 /* edge board */
 .board { table-layout: fixed; }
-.board col.c1 { width: 32%; } .board col.c2 { width: 30%; } .board col.c3 { width: 20%; } .board col.c4 { width: 18%; }
+.board col.c1 { width: 28%; } .board col.c2 { width: 26%; } .board col.cp { width: 13%; } .board col.c3 { width: 17%; } .board col.c4 { width: 16%; }
+.pcol .pl { color: var(--muted); font-size: 12.5px; margin-right: 4px; }
 .board td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board tr.is-bet td:first-child { box-shadow: inset 2px 0 0 var(--accent); padding-left: 10px; }
 .board tr.is-skip td, .board tr.is-skip .name { color: var(--muted); }
@@ -159,7 +160,8 @@ tr.is-bet .edge .bar i { background: var(--accent); }
 .betcell .short { display: none; }
 @media (max-width: 620px) {
   /* phones: price under the bet, narrower edge column, decision word only */
-  .board col.c1 { width: 37%; } .board col.c2 { width: 27%; } .board col.c3 { width: 17%; } .board col.c4 { width: 19%; }
+  .board col.c1 { width: 30%; } .board col.c2 { width: 23%; } .board col.cp { width: 11%; } .board col.c3 { width: 14%; } .board col.c4 { width: 22%; }
+  .pcol .pl { display: none; }
   .board td, .board th { padding-left: 4px; padding-right: 4px; font-size: 13.5px; }
   .board th { font-size: 12px; }
   .board .small { font-size: 11.5px; }
@@ -355,8 +357,8 @@ footer a { color: var(--ink-2); }
     <section id="board-sec">
       <div class="shead"><h2>Edge board</h2><p>Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
       <table class="board">
-        <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
-        <thead><tr><th>Player</th><th>Bet</th><th class="r">Edge</th><th>Decision</th></tr></thead>
+        <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
+        <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
         <tbody id="board"></tbody>
       </table>
     </section>
@@ -714,6 +716,9 @@ function verdict(r) {
   return { cls: 'ok', html: `${projTxt} Still a bettable edge on the ${cap(r.side).toLowerCase()}: ${sgn(r.edge * 100)}% (${ch >= 0 ? 'up' : 'down'} from ${sgn(b.edge * 100)}%).` };
 }
 
+// The model's chance that the side being bet wins: P(Under) or P(Over)
+const pCell = r => r.ruledOut ? '<span class="muted">–</span>' : `<span class="pl">P(${cap(r.side)})</span>${pct(r.p, 0)}`;
+
 function edgeCell(r, topE) {
   const bar = `<span class="bar"><i style="width:${Math.max(0, r.edge / topE * 100)}%"></i><span class="t" style="left:${0.02 / topE * 100}%"></span></span>`;
   if (r.ruledOut) return `<span class="edge muted">–</span>`;
@@ -744,6 +749,7 @@ function renderBoard() {
     return `<tr class="is-${r.play}${(r.adj && r.edge < 0.02) || r.ruledOut ? ' is-gone' : ''}${r.ruledOut ? '' : ' pickable'}${r.id === OPEN ? ' open' : ''}" data-id="${r.id}" tabindex="0" aria-expanded="${r.id === OPEN}">
       <td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp} · ${minTxt}</div></td>
       <td><span class="betcell">${logo(r.book, r.link)}<span class="bt"><span class="sd"><span class="long">${cap(r.side)}</span><span class="short">${r.side[0]}</span> ${r.line}</span> <span class="pr muted">${odds(r.price)}</span>${sideTxt}</span></span></td>
+      <td class="r pcol">${pCell(r)}</td>
       <td class="r edgecol">${edgeCell(r, topE)}</td>
       <td class="deccol">${decisionCell(r)}</td></tr>` + (r.id === OPEN && !r.ruledOut ? editorRow(r) : '');
   }).join('');
@@ -757,7 +763,7 @@ function renderBoard() {
 
 function editorRow(r) {
   const v = verdict(r);
-  return `<tr class="edrow"><td colspan="4"><div class="editor" data-id="${r.id}">
+  return `<tr class="edrow"><td colspan="5"><div class="editor" data-id="${r.id}">
     <div class="ctl">
       <span class="lbl">Your minutes</span>
       <button class="step" type="button" data-d="-1" aria-label="One minute less">−</button>
@@ -807,6 +813,7 @@ function wireEditor() {
     num.value = mins;
     const v = verdict(r), p = ed.querySelector('.verdict');
     p.className = 'verdict ' + v.cls; p.innerHTML = v.html;
+    tr.querySelector('.pcol').innerHTML = pCell(r);
     tr.querySelector('.edgecol').innerHTML = edgeCell(r, Math.max(r.edge, r.base.edge, 0.04));
   };
   const commit = mins => {
@@ -857,6 +864,7 @@ function renderBoardStatic() {
     return `<tr class="is-${r.play}">
       <td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp}</div></td>
       <td><span class="betcell">${logo(r.book)}${cap(r.side)} ${r.line} <span class="muted">${odds(r.price)}</span></span></td>
+      <td class="r pcol">${r.p == null ? '' : pCell(r)}</td>
       <td class="r"><span class="edge">${sgn(r.edge * 100)}%<span class="bar"><i style="width:${Math.max(0, r.edge / top * 100)}%"></i><span class="t" style="left:${0.02 / top * 100}%"></span></span></span></td>
       <td>${dec}</td></tr>`;
   }).join('');
