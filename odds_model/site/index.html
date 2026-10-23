@@ -968,31 +968,20 @@ async function renderHistory() {
 
 const monthName = (m, opts = { month: 'long', year: 'numeric' }) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', opts);
 
-// The panel beside the season chart: best and worst month, streaks, side split, typical price and stake
+// The panel beside the season chart: best and worst month, longest streaks
 function seasonDetails(L) {
   if (!L.length) return '<tr><td>Fills in once plays settle.</td></tr>';
-  const rec = bs => { const w = bs.filter(b => b.result === 'win').length; return `${w}–${bs.length - w}`; };
   const u = bs => bs.reduce((a, b) => a + b.units, 0);
   const byMonth = {};
   L.forEach(b => (byMonth[b.date.slice(0, 7)] ||= []).push(b));
   const months = Object.entries(byMonth).map(([m, bs]) => [m, u(bs)]).sort((a, b) => b[1] - a[1]);
   const streak = res => { let best = 0, run = 0; L.forEach(b => { run = b.result === res ? run + 1 : 0; best = Math.max(best, run); }); return best; };
-  const unders = L.filter(b => b.side === 'UNDER'), overs = L.filter(b => b.side === 'OVER');
-  const side = bs => bs.length ? `${rec(bs)} · <span class="${cls(u(bs))}">${sgn(u(bs), 1)}u</span>` : '–';
-  const w = L.reduce((a, b) => a + payout(b.price), 0) / L.length;          // average win per unit, back to American odds
-  const avgPrice = w >= 1 ? w * 100 : -100 / w, avgStake = L.reduce((a, b) => a + b.stake, 0) / L.length;
-  const best = L.reduce((a, b) => (b.units > a.units ? b : a));
   const mo = ([m, v]) => `${monthName(m, { month: 'short', year: 'numeric' })} · <span class="${cls(v)}">${sgn(v, 1)}u</span>`;
   return [
     ['Best month', mo(months[0])],
     ['Worst month', mo(months[months.length - 1])],
     ['Longest win streak', streak('win')],
     ['Longest losing streak', streak('loss')],
-    ['Unders', side(unders)],
-    ['Overs', side(overs)],
-    ['Average price', odds(Math.round(avgPrice))],
-    ['Average stake', avgStake.toFixed(2) + 'u'],
-    ['Biggest win', `${esc(best.player)} · <span class="pos">${sgn(best.units, 2)}u</span>`],
   ].map(([k, v]) => `<tr><td>${k}</td><td class="r">${v}</td></tr>`).join('');
 }
 
