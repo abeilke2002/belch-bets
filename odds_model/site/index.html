@@ -207,7 +207,9 @@ body[data-view="history"] :is(.hero, #mine, #season, #banner, .daynav, #flag) { 
 .scard .k { font-size: 13px; color: var(--muted); }
 .hist section { padding-block: 26px; display: grid; gap: 18px; min-width: 0; }
 .hist h2 { font: 700 20px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
-.hist .chart { max-width: 680px; }
+.hside td { padding: 9px 0; font-size: 14px; }
+.hside td:first-child { color: var(--muted); }
+.hside td.r { white-space: nowrap; }
 .month { border-top: 1px solid var(--line); }
 .month summary { display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; cursor: pointer; list-style: none; font-weight: 500; }
 .month summary::-webkit-details-marker { display: none; }
@@ -385,7 +387,10 @@ footer a { color: var(--ink-2); }
     <section>
       <div class="shead"><h2 id="h-title"></h2><p id="h-note"></p></div>
       <div class="stats" id="h-stats"></div>
-      <div class="chart" id="h-chart"></div>
+      <div class="two">
+        <div class="chart" id="h-chart"></div>
+        <div><p class="sub-h">Season details</p><table class="hside"><tbody id="h-side"></tbody></table></div>
+      </div>
       <div id="h-plays"></div>
     </section>
   </div>
@@ -946,18 +951,49 @@ async function renderHistory() {
     [`${sgn(t.roi * 100)}%`, 'return on units risked', ''], [`${s.bets.length}`, 'plays', ''],
   ].map(([n, k, c]) => `<div class="fig"><span class="n ${c}">${n}</span><span class="k">${k}</span></div>`).join('') : '';
   if (t.L.length) drawChart(t.L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled play.</p>';
+  $('h-side').innerHTML = seasonDetails(t.L);
 
   const months = {};
   [...s.bets].reverse().forEach(b => (months[b.date.slice(0, 7)] ||= []).push(b));
-  $('h-plays').innerHTML = Object.entries(months).map(([m, bets], i) => {
+  $('h-plays').innerHTML = Object.entries(months).map(([m, bets]) => {
     const u = bets.reduce((a, b) => a + (settledResult(b.result) ? b.units : 0), 0), w = bets.filter(b => b.result === 'win').length;
     const l = bets.filter(b => b.result === 'loss').length;
-    const name = new Date(m + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    return `<details class="month"${i === 0 ? ' open' : ''}><summary><span class="t">${name}</span>
+    const name = monthName(m);
+    return `<details class="month"><summary><span class="t">${name}</span>
       <span class="m">${w}–${l} · <span class="${cls(u)}">${sgn(u, 2)}u</span></span></summary>
       <table class="plays"><tbody>${bets.map(b => histRow(b, s.kind === 'live' && DATES.includes(b.date))).join('')}</tbody></table></details>`;
   }).join('') || '<p class="muted">No plays yet this season.</p>';
   $('h-plays').querySelectorAll('tr.go').forEach(tr => tr.onclick = () => { setView('deep'); show(tr.dataset.date); scrollTo(0, 0); });
+}
+
+const monthName = (m, opts = { month: 'long', year: 'numeric' }) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', opts);
+
+// The panel beside the season chart: best and worst month, streaks, side split, typical price and stake
+function seasonDetails(L) {
+  if (!L.length) return '<tr><td>Fills in once plays settle.</td></tr>';
+  const rec = bs => { const w = bs.filter(b => b.result === 'win').length; return `${w}–${bs.length - w}`; };
+  const u = bs => bs.reduce((a, b) => a + b.units, 0);
+  const byMonth = {};
+  L.forEach(b => (byMonth[b.date.slice(0, 7)] ||= []).push(b));
+  const months = Object.entries(byMonth).map(([m, bs]) => [m, u(bs)]).sort((a, b) => b[1] - a[1]);
+  const streak = res => { let best = 0, run = 0; L.forEach(b => { run = b.result === res ? run + 1 : 0; best = Math.max(best, run); }); return best; };
+  const unders = L.filter(b => b.side === 'UNDER'), overs = L.filter(b => b.side === 'OVER');
+  const side = bs => bs.length ? `${rec(bs)} · <span class="${cls(u(bs))}">${sgn(u(bs), 1)}u</span>` : '–';
+  const w = L.reduce((a, b) => a + payout(b.price), 0) / L.length;          // average win per unit, back to American odds
+  const avgPrice = w >= 1 ? w * 100 : -100 / w, avgStake = L.reduce((a, b) => a + b.stake, 0) / L.length;
+  const best = L.reduce((a, b) => (b.units > a.units ? b : a));
+  const mo = ([m, v]) => `${monthName(m, { month: 'short', year: 'numeric' })} · <span class="${cls(v)}">${sgn(v, 1)}u</span>`;
+  return [
+    ['Best month', mo(months[0])],
+    ['Worst month', mo(months[months.length - 1])],
+    ['Longest win streak', streak('win')],
+    ['Longest losing streak', streak('loss')],
+    ['Unders', side(unders)],
+    ['Overs', side(overs)],
+    ['Average price', odds(Math.round(avgPrice))],
+    ['Average stake', avgStake.toFixed(2) + 'u'],
+    ['Biggest win', `${esc(best.player)} · <span class="pos">${sgn(best.units, 2)}u</span>`],
+  ].map(([k, v]) => `<tr><td>${k}</td><td class="r">${v}</td></tr>`).join('');
 }
 
 function histRow(b, link) {
