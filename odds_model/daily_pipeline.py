@@ -516,8 +516,10 @@ def deploy(paths):
 
 
 def notify(msg):
-    subprocess.run(['osascript', '-e', f'display notification "{msg[:200]}" with title "Belch Bets"'],
-                   capture_output=True)
+    """Mac desktop notification when run locally; a no-op in the cloud run (no osascript on Linux)."""
+    if shutil.which('osascript'):
+        subprocess.run(['osascript', '-e', f'display notification "{msg[:200]}" with title "Belch Bets"'],
+                       capture_output=True)
 
 
 def error_banner(paths, mode, err):
