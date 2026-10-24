@@ -12,7 +12,8 @@ The bets follow the backtested rule exactly:
              (noon, then previous evening) fall back to whoever missed their previous game
   skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back;
              no bets at all from April 1 to the end of the regular season (rotations change, the books know first);
-             players in their first 3 games with a new team, or traded and not yet played for the new one
+             a team's players in its first 3 games after a player leaves it midseason (roles reshuffle),
+             and a traded player until he has played for his new team
   bet        every remaining prop with an edge >= 2%, at the best price among config.BOOKS
   stake      flat 1u each (the stake the multi-seed backtest validated; size the unit for ~3 bets a night)
 Outputs: data/site/picks.json (the website reads this), data/bet_log.csv. Replays write under data/replay/.
@@ -172,17 +173,56 @@ def season_end(day):
     return day.month in (4, 5, 6)
 
 
-NEW_TEAM_GAMES = 3
+LEFT_TEAM_GAMES = 3
+ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
 
 
-def new_team_games(games, day):
-    """Games played for his current team by players who moved (trade or offseason), {PLAYER_ID: n}, only n < 3.
-    Teams compared by name: team ids for the same club can differ between data sources."""
-    p = games[games['played'] & (games['GAME_DATE'] < pd.Timestamp(day))].sort_values(['PLAYER_ID', 'GAME_DATE'])
-    stint = (p['teamName'] != p.groupby('PLAYER_ID')['teamName'].shift(1)).groupby(p['PLAYER_ID']).cumsum()
-    last = p.assign(stint=stint).groupby('PLAYER_ID').agg(stint=('stint', 'last'), n=('stint', lambda s: (s == s.iloc[-1]).sum()))
-    moved = last[(last['stint'] > 1) & (last['n'] < NEW_TEAM_GAMES)]
-    return moved['n'].to_dict()
+def espn_rosters(day):
+    """{team nickname: [normalized names]} for teams playing on `day`, from ESPN's current rosters ({} if ESPN fails)."""
+    import requests
+    out = {}
+    try:
+        sb = requests.get(f'{ESPN}/scoreboard', params={'dates': day.strftime('%Y%m%d')}, timeout=30).json()
+        for e in sb.get('events', []):
+            for c in e['competitions'][0]['competitors']:
+                t = c['team']
+                r = requests.get(f"{ESPN}/teams/{t['id']}/roster", timeout=30).json()
+                ath = [x for a in r.get('athletes', []) for x in (a.get('items') or [a])]
+                names = [x.get('fullName') or x.get('displayName') for x in ath]
+                if len(names) >= 10:
+                    out[t.get('name') or t['displayName'].split(' ')[-1]] = [norm(n) for n in names if n]
+    except Exception as e:
+        print(f'ESPN rosters failed ({type(e).__name__}); using box scores only for departures')
+    return out
+
+
+def left_behind(games, day, rosters=None):
+    """{team nickname: n} for teams in their first 3 games (n played so far) after a player left them midseason.
+    The rest of the roster's roles reshuffle and the books adjust first: in the backtest those bets won 42%.
+    A departure is a player whose latest box score this season is for another team, or (live) who played for the
+    team this season but is missing from its current ESPN roster (a trade is known before he plays again)."""
+    season = season_of(day)
+    p = games[games['played'] & (games['season'] == season) & (games['GAME_DATE'] < pd.Timestamp(day))].sort_values('GAME_DATE')
+    if p.empty:
+        return {}
+    last = p.groupby(['PLAYER_ID', 'teamName'])['GAME_DATE'].max().reset_index()
+    latest = last['PLAYER_ID'].map(p.groupby('PLAYER_ID')['teamName'].last())
+    deps = list(zip(last.loc[last['teamName'] != latest, 'teamName'], last.loc[last['teamName'] != latest, 'GAME_DATE']))
+    names = p.groupby('PLAYER_ID')['player_name'].last()
+    for team, keys in (rosters or {}).items():
+        cand = pd.DataFrame({'key': keys, 'PLAYER_ID': range(len(keys))})
+        cur = last[(last['teamName'] == team) & (latest == team)]
+        miss = [(team, d) for pid, d in zip(cur['PLAYER_ID'], cur['GAME_DATE'])
+                if norm(names[pid]) not in keys and roster_match(norm(names[pid]), cand) is None]
+        if len(miss) <= 3:                               # more looks like a name or data problem, not trades
+            deps += miss
+    tg = p.drop_duplicates(['teamName', 'GAME_ID'])
+    out = {}
+    for team, left in deps:
+        n = int(((tg['teamName'] == team) & (tg['GAME_DATE'] > left)).sum())
+        if n < LEFT_TEAM_GAMES:
+            out[team] = min(n, out.get(team, n))
+    return out
 
 
 def on_other_team(b):
@@ -193,7 +233,7 @@ def on_other_team(b):
     return [isinstance(h, str) and not (h.endswith(t) or str(a).endswith(t)) for t, h, a in zip(b['team'], b['home_team'], b['away_team'])]
 
 
-def make_board(f, status, day, moved=None):
+def make_board(f, status, day, left=None):
     """Every prop with a line, scored, with what the rule does with it."""
     b = f.dropna(subset=['early_line', 'p_over']).copy()
     st = status.drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')['status']
@@ -205,11 +245,11 @@ def make_board(f, status, day, moved=None):
     b['price'] = np.where(over, b['early_best_over_price'], b['early_best_under_price'])
     b['book'] = np.where(over, b['early_best_over_book'], b['early_best_under_book'])
     b['p_side'] = np.where(over, b['p_over'], 1 - b['p_over'])
-    new = b['PLAYER_ID'].map(moved or {})
-    b['skip'] = np.select([np.full(len(b), season_end(day)), np.asarray(on_other_team(b), dtype=bool), new.notna(),
+    gone = b['team'].map(left or {})
+    b['skip'] = np.select([np.full(len(b), season_end(day)), np.asarray(on_other_team(b), dtype=bool), gone.notna(),
                            b['status'].isin(ON_REPORT), b['rest_days'] == 1],
                           ['last two weeks of the season', 'new team, no games yet',
-                           'new team (game ' + (new.fillna(0) + 1).astype(int).astype(str) + ' of first 3)',
+                           'teammate traded (game ' + (gone.fillna(0) + 1).astype(int).astype(str) + ' of 3 since)',
                            'on injury report (' + b['status'].fillna('') + ')', 'back-to-back'], '')
     bet = (b['skip'] == '') & (b['edge'] >= MIN_EDGE)
     b['play'] = np.where(b['skip'] != '', 'skip: ' + b['skip'], np.where(bet, 'BET ' + b['side'] + f' {STAKE:g}u',
@@ -238,7 +278,7 @@ def run_picks(day, paths, replay, now):
     if 'p_over' not in f:
         site['status'], site['message'] = 'error', 'No noon lines were found for today\'s games.'
         return site
-    board, bet_idx = make_board(f, status, day, new_team_games(games, day))
+    board, bet_idx = make_board(f, status, day, left_behind(games, day, None if replay else espn_rosters(day)))
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['props'] = props_payload(board)

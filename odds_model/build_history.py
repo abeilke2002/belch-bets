@@ -3,8 +3,8 @@
     python build_history.py            # about 5 minutes: rebuilds the noon projections from current data
 
 Out-of-sample backtest of the site's rule: every prop not on the injury report or a back-to-back with an edge
->= 2%, flat 1u, at the best noon price, nothing from April 1 on (daily_pipeline.season_end), and nobody in his
-first 3 games with a new team (daily_pipeline.new_team_games). Projections ('half' injury policy, damping) and the classifier (market
+>= 2%, flat 1u, at the best noon price, nothing from April 1 on (daily_pipeline.season_end), and nothing on a
+team in its first 3 games after a player left it midseason (daily_pipeline.left_behind). Projections ('half' injury policy, damping) and the classifier (market
 fixed + recent-weighted) are both trained only on earlier seasons. 2023-24 is left out: it has no earlier lines,
 so its classifier would have to be trained on later seasons. The live season comes from picks.json.
 SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robustness run, 2026-10-23); the History
@@ -32,7 +32,7 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
 PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
 MIN_EDGE, STAKE = 0.02, 1.0
-SPREAD = {'2025-26': (1.1, -1.7, 3.7, 3.6), '2024-25': (3.3, 1.9, 4.7, 20.0)}     # 10-seed avg/min/max %/bet, avg units
+SPREAD = {'2025-26': (4.5, 0.6, 7.2, 13.8), '2024-25': (7.3, 6.0, 8.6, 40.9)}     # 10-seed avg/min/max %/bet, avg units
 abbr = lambda full: next((a for nick, a in TEAM_ABBR.items() if str(full).endswith(nick)), str(full))
 
 
@@ -61,16 +61,23 @@ def projections():
     return pd.concat(out), rep
 
 
-def new_team_rows():
-    """(PLAYER_ID, GAME_ID) of games in a player's first 3 with a new team (teams compared by name, as the site does)."""
-    g = pd.read_parquet(DATA / 'player_games.parquet', columns=['PLAYER_ID', 'GAME_ID', 'GAME_DATE', 'teamName', 'played'])
+def left_behind_rows():
+    """(GAME_ID, team) for a team's first 3 games after a player left it midseason: his last game for the team, then
+    a later game for another team the same season (the backtest can see the move; live, ESPN rosters show it)."""
+    g = pd.read_parquet(DATA / 'player_games.parquet', columns=['PLAYER_ID', 'GAME_ID', 'GAME_DATE', 'teamName', 'played', 'season'])
     p = g[g['played']].sort_values(['PLAYER_ID', 'GAME_DATE'])
-    stint = (p['teamName'] != p.groupby('PLAYER_ID')['teamName'].shift(1)).groupby(p['PLAYER_ID']).cumsum()
-    n = p.assign(stint=stint).groupby(['PLAYER_ID', 'stint']).cumcount()
-    return set(zip(p.loc[(stint > 1) & (n < 3), 'PLAYER_ID'], p.loc[(stint > 1) & (n < 3), 'GAME_ID']))
+    last = p.groupby(['PLAYER_ID', 'season', 'teamName'])['GAME_DATE'].agg(['min', 'max']).reset_index()
+    nxt = last.sort_values('min').groupby(['PLAYER_ID', 'season'])['teamName'].shift(-1)
+    left = last[nxt.reindex(last.index).notna()]                      # a later stint elsewhere the same season
+    tg = g[['teamName', 'season', 'GAME_ID', 'GAME_DATE']].drop_duplicates(['teamName', 'GAME_ID']).sort_values('GAME_DATE')
+    out = set()
+    for r in left.itertuples():
+        t = tg[(tg['teamName'] == r.teamName) & (tg['season'] == r.season) & (tg['GAME_DATE'] > r.max)].head(3)
+        out |= set(zip(t['GAME_ID'], t['teamName']))
+    return out
 
 
-NEW_TEAM = None
+LEFT = None
 
 
 def season_bets(d, test, train):
@@ -80,9 +87,9 @@ def season_bets(d, test, train):
     eu = (1 - te['p']) - american_to_prob(te['early_best_under_price'])
     te['over_side'], te['edge'] = eo >= eu, np.maximum(eo, eu)
     april_on = pd.to_datetime(te['GAME_DATE']).dt.month.isin([4, 5, 6])          # the site sits out the season's end
-    new_team = pd.Series([k in NEW_TEAM for k in zip(te['PLAYER_ID'], te['GAME_ID'])], index=te.index)
+    gone = pd.Series([k in LEFT for k in zip(te['GAME_ID'], te['teamName'])], index=te.index)
     b = te[~te['status'].isin(['Probable', 'Questionable', 'Doubtful']) & (te['rest_days'] != 1) & (te['edge'] >= MIN_EDGE)
-           & ~april_on & ~new_team]
+           & ~april_on & ~gone]
     b = b.sort_values(['GAME_DATE', 'edge'], ascending=[True, False])
     over = b['over_side'].values
     price = np.where(over, b['early_best_over_price'], b['early_best_under_price']).astype(int)
@@ -99,8 +106,8 @@ def season_bets(d, test, train):
 
 
 def main():
-    global NEW_TEAM
-    NEW_TEAM = new_team_rows()
+    global LEFT
+    LEFT = left_behind_rows()
     proj, rep = projections()
     d = ct.build_dataset(DATA).merge(rep[['GAME_ID', 'PLAYER_ID', 'status']].drop_duplicates(['GAME_ID', 'PLAYER_ID']),
                                      on=['GAME_ID', 'PLAYER_ID'], how='left').merge(proj, on=['PLAYER_ID', 'GAME_ID'])
