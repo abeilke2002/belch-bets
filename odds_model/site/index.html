@@ -723,7 +723,7 @@ function holdSide(r) {
 }
 
 const skipWhy = s => s === 'back-to-back' ? 'back-to-back' : s.startsWith('last two weeks') ? 'season end'
-  : (s.match(/\((\w+)\)/) || [, 'injury report'])[1].toLowerCase();
+  : s.startsWith('new team') ? 'new team' : (s.match(/\((\w+)\)/) || [, 'injury report'])[1].toLowerCase();
 
 // What your minutes did to this prop, in words
 function verdict(r) {

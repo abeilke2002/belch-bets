@@ -282,7 +282,7 @@ def predict_day(games, day, schedule, out_names=(), snapshot='early', margin=0.0
 
     keep = ['player_name', 'team', 'TEAM_ID', 'GAME_ID', 'gp', 'pts_season', 'pts_5', 'min_5', 'pred_minutes',
             'pred_points', 'pred_sd', 'out_ppg', 'n_out', 'PLAYER_ID', 'OPP_ID', 'rest_days', 'out_w',
-            'event_id', 'commence_time', f'{snapshot}_novig_over', 'close_line', 'close_novig_over',
+            'event_id', 'commence_time', 'home_team', 'away_team', f'{snapshot}_novig_over', 'close_line', 'close_novig_over',
             f'{snapshot}_line', f'{snapshot}_best_over_price', f'{snapshot}_best_over_book',
             f'{snapshot}_best_under_price', f'{snapshot}_best_under_book', f'{snapshot}_best_over_link',
             f'{snapshot}_best_under_link', 'p_over', 'edge', 'play', 'stake']
