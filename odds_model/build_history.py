@@ -3,9 +3,9 @@
     python build_history.py            # about 5 minutes: rebuilds the noon projections from current data
 
 Out-of-sample backtest of the site's rule: every prop not on the injury report or a back-to-back with an edge
->= 2%, flat 1u, at the best noon price. Projections ('half' injury policy, damping) are trained only on earlier
-seasons; the classifier (market fixed + recent-weighted) on earlier seasons too, except 2023-24, which has no
-earlier lines and uses the two later seasons. The live season comes from picks.json.
+>= 2%, flat 1u, at the best noon price. Projections ('half' injury policy, damping) and the classifier (market
+fixed + recent-weighted) are both trained only on earlier seasons. 2023-24 is left out: it has no earlier lines,
+so its classifier would have to be trained on later seasons. The live season comes from picks.json.
 SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robustness run, 2026-10-23); the History
 tab shows seed 0, the production setting, and quotes the 10-seed average and range next to it.
 """
@@ -29,9 +29,9 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
              'Pelicans': 'NOP', 'Knicks': 'NYK', 'Thunder': 'OKC', 'Magic': 'ORL', '76ers': 'PHI', 'Suns': 'PHX',
              'Trail Blazers': 'POR', 'Kings': 'SAC', 'Spurs': 'SAS', 'Raptors': 'TOR', 'Jazz': 'UTA', 'Wizards': 'WAS'}
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
-PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24'], '2023-24': ['2024-25', '2025-26']}
+PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
 MIN_EDGE, STAKE = 0.02, 1.0
-SPREAD = {'2025-26': (2.8, 0.4, 5.6, 9.9), '2024-25': (1.5, 0.0, 2.9, 10.0), '2023-24': (6.2, 3.7, 10.3, 17.3)}
+SPREAD = {'2025-26': (2.8, 0.4, 5.6, 9.9), '2024-25': (1.5, 0.0, 2.9, 10.0)}
 abbr = lambda full: next((a for nick, a in TEAM_ABBR.items() if str(full).endswith(nick)), str(full))
 
 
@@ -45,7 +45,7 @@ def projections():
     x['out_fga_share'] = x['out_fga'] / x['team_fga_pg']
     x = add_redistribution(x)
     mf, pf, out = selected('minutes'), selected('points'), []
-    for s in sorted(PLAN):
+    for s in ['2023-24', '2024-25', '2025-26']:      # 2023-24 projections are the 2024-25 classifier's training rows
         tr = x[x.season < s].copy()
         tr['pred_minutes'] = np.nan
         for t in tr.season.unique():
@@ -92,7 +92,7 @@ def main():
         bets = season_bets(d, test, train)
         roi, lo, hi, units = SPREAD[test]
         print(f'{test}: {len(bets)} bets, {bets["units"].sum():+.1f}u ({bets["units"].sum() / len(bets):+.1%})')
-        when = 'the two later seasons (no earlier lines exist)' if test == '2023-24' else ' and '.join(train)
+        when = ' and '.join(train)
         seasons.append({'season': test, 'kind': 'backtest', 'bets': json.loads(bets.to_json(orient='records')),
                         'note': f'Backtest, every eligible prop with a 2%+ edge at 1u: projections trained only on earlier '
                                 f'seasons, over/under model trained on {when}. Retrained 10 ways, this season averaged '
