@@ -1,8 +1,8 @@
 {
  "date": "2026-10-23",
  "updated": "2026-10-23 07:22 PM ET",
- "status": "error",
- "message": "The results update failed at 12:14 AM ET: CalledProcessError: Command '['/opt/hostedtoolcache/Python/3.11.17/x64/bin/python', '/home/runner/work/belch-bets/belch-bets/odds_model/pull_box_scores_espn.py']' returned non-zero exit status 1.",
+ "status": "ok",
+ "message": "",
  "pick": {
   "date": "2026-10-23",
   "player": "Tari Eason",
