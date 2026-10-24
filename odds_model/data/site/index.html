@@ -78,14 +78,23 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 .nobet .player { color: var(--ink-2); }
 .nobet p { margin: 0; color: var(--muted); max-width: 56ch; }
 
-/* pick + book prices side by side */
-.hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 0 56px; align-items: center; }
+/* several bets: one compact row each */
 .hero > * { min-width: 0; }
-.books-top { padding-block: 0 36px; }
-@media (max-width: 860px) { .hero { grid-template-columns: minmax(0, 1fr); } .books-top { padding-top: 0; margin-top: -12px; } }
-.why-wrap { max-width: 620px; }
-body[data-view="glance"] .books-top { display: none !important; }
-body[data-view="glance"] .hero { grid-template-columns: minmax(0, 1fr); }
+.betrows { display: grid; }
+.betrow { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) auto minmax(92px, auto); gap: 6px 22px; align-items: center;
+          padding: 14px 0; border-top: 1px solid var(--line); }
+.betrow .name { font: 700 18px/1.2 var(--display); }
+.betrow .what { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.betrow .side { font: 700 17px/1.2 var(--display); color: var(--accent); }
+.betrow .nums { display: flex; gap: 18px; font-size: 15px; font-weight: 600; }
+.betrow .nums small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.betrow .res { text-align: right; font-size: 14px; }
+@media (max-width: 700px) { .betrow { grid-template-columns: minmax(0, 1fr) auto; } .betrow .what { grid-column: 1; } .betrow .res { grid-row: 1; grid-column: 2; } }
+.why-wrap { max-width: 720px; }
+.whybet { display: grid; gap: 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+.whybet h3 { margin: 0; font: 700 16px/1.3 var(--display); }
+.whybet h3 span { color: var(--accent); }
+.whybet .books { margin-top: 4px; }
 
 /* Season strip (glance) */
 .season { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 34px; padding-block: 22px; border-top: 1px solid var(--line); }
@@ -126,9 +135,8 @@ th:last-child, td:last-child { padding-right: 0; }
 .strip .mk.up { top: 0; }
 .strip .mk.down { top: 17px; }
 .why { margin: 0; color: var(--ink-2); max-width: 62ch; font-size: 14.5px; }
-.boost { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 16px; }
+.boost { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 4px; }
 .boost .sub-h { margin: 0; }
-#boost-out { margin-top: 10px; }
 
 .books td { color: var(--ink-2); }
 .books tr.best td { color: var(--ink); }
@@ -317,28 +325,21 @@ footer a { color: var(--ink-2); }
   <div id="banner"></div>
   <div class="hero">
     <div id="pick"></div>
-    <aside class="books-top" id="books-top" hidden>
-      <p class="sub-h">Same bet at each book</p>
-      <table class="books"><thead><tr><th>Book</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody id="books"></tbody></table>
-    </aside>
   </div>
   <div id="mine"></div>
   <div class="season" id="season"></div>
 
   <div class="deep" id="deep" hidden>
     <section id="why-sec">
-      <div class="shead"><h2>Why this bet</h2></div>
+      <div class="shead"><h2 id="why-title">Why this bet</h2></div>
       <div class="why-wrap">
-        <p class="sub-h">Projection vs line</p>
-        <div class="strip" id="strip" aria-hidden="true"></div>
-        <p class="why" id="why"></p>
         <div class="boost">
           <span class="sub-h">Profit boost</span>
           <div class="seg" id="boost" role="group" aria-label="Profit boost">
             <button data-b="0" aria-pressed="true">None</button><button data-b="0.25" aria-pressed="false">25%</button><button data-b="0.3" aria-pressed="false">30%</button><button data-b="0.5" aria-pressed="false">50%</button>
           </div>
         </div>
-        <p class="why" id="boost-out" hidden></p>
+        <div id="why-list"></div>
       </div>
     </section>
 
@@ -454,30 +455,36 @@ async function getJSON(path) {
   return r.json();
 }
 
-const ledgerEntry = () => (DATA.record?.ledger || []).find(b => b.date === DATA.date);
+// The day's bets (older saved days have a single 'pick') and each one's row in the season ledger
+const dayPicks = () => DATA.picks || (DATA.pick ? [DATA.pick] : []);
+const ledgerFor = p => (DATA.record?.ledger || []).find(b => b.date === DATA.date && b.player === p.player);
 const seasonBets = () => (DATA.record?.ledger || []).filter(b => b.date <= DATA.date);
 
 /* ---------- glance ---------- */
 
+const gameOf = p => (DATA.games || []).find(x => x.home === p.team || x.away === p.team);
+function outcomeOf(p) {
+  const L = ledgerFor(p), g = gameOf(p);
+  if (!(L && settledResult(L.result))) return `<span class="dot" style="background:var(--muted)"></span>Pending, tips at ${g ? esc(g.tip) : 'tonight'}`;
+  const c = L.result === 'win' ? 'var(--win)' : L.result === 'loss' ? 'var(--loss)' : 'var(--muted)';
+  const word = { win: 'Won', loss: 'Lost', void: 'Void, did not play', push: 'Push' }[L.result];
+  return `<span class="dot" style="background:${c}"></span><b style="color:${c}">${word}</b>
+    ${L.points != null ? `<span>scored ${L.points}</span>` : ''}<b class="${cls(L.units)}">${sgn(L.units, 2)}u</b>`;
+}
+
 function renderPick() {
-  const p = DATA.pick, replay = (DATA.slate?.odds || '').startsWith('replay');
+  const P = dayPicks(), replay = (DATA.slate?.odds || '').startsWith('replay');
   $('flag').hidden = !replay;
   $('banner').innerHTML = DATA.status === 'error'
     ? `<div class="banner">Today's update failed. ${esc(DATA.message)} What's shown may be out of date.</div>` : '';
-  if (!p) {
-    const head = DATA.status === 'error' ? 'No pick yet.' : (DATA.games || []).length ? 'No bet today.' : 'No games today.';
+  if (!P.length) {
+    const head = DATA.status === 'error' ? 'No bets yet.' : (DATA.games || []).length ? 'No bets today.' : 'No games today.';
     $('pick').innerHTML = `<div class="pick nobet"><div class="meta">${longDate(DATA.date)}</div>
       <h1 class="player">${head}</h1><p>${esc(DATA.message || '')}</p></div>`;
     return;
   }
-  const L = ledgerEntry(), g = (DATA.games || []).find(x => x.home === p.team || x.away === p.team);
-  let outcome = `<span class="dot" style="background:var(--muted)"></span>Pending, tips at ${g ? esc(g.tip) : 'tonight'}`;
-  if (L && settledResult(L.result)) {
-    const c = L.result === 'win' ? 'var(--win)' : L.result === 'loss' ? 'var(--loss)' : 'var(--muted)';
-    const word = { win: 'Won', loss: 'Lost', void: 'Void, did not play', push: 'Push' }[L.result];
-    outcome = `<span class="dot" style="background:${c}"></span><b style="color:${c}">${word}</b>
-      ${L.points != null ? `<span>scored ${L.points}</span>` : ''}<b class="${cls(L.units)}">${sgn(L.units, 2)}u</b>`;
-  }
+  if (P.length > 1) return renderPickList(P);
+  const p = P[0], L = ledgerFor(p), g = gameOf(p), outcome = outcomeOf(p);
   $('pick').innerHTML = `<div class="pick">
     <div class="meta">${longDate(DATA.date)} · <b>${esc(p.team)} vs ${esc(p.opp)}</b>${g ? ' · ' + esc(g.tip) : ''}</div>
     <h1 class="player">${esc(p.player)}</h1>
@@ -489,6 +496,24 @@ function renderPick() {
     </div>
     ${L && settledResult(L.result) && !replay ? '' : betButton(p.book, p.link, p.side, p.line)}
     <div class="outcome">${outcome}</div>
+  </div>`;
+}
+
+// Several bets: a compact row each (tap the book to open the bet)
+function renderPickList(P) {
+  const S = P.map(ledgerFor).filter(L => L && settledResult(L.result));
+  const done = S.length ? ` · <b class="${cls(S.reduce((a, L) => a + L.units, 0))}">${sgn(S.reduce((a, L) => a + L.units, 0), 2)}u</b> so far` : '';
+  $('pick').innerHTML = `<div class="pick">
+    <div class="meta">${longDate(DATA.date)} · ${P.reduce((a, p) => a + p.stake, 0)}u total, ${P[0].stake}u each${done}</div>
+    <h1 class="player">${P.length} bets${DATA.date === LATEST ? ' tonight' : ''}</h1>
+    <div class="betrows">${P.map(p => {
+      const g = gameOf(p);
+      return `<div class="betrow">
+        <div><div class="name">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp)}${g ? ' · ' + esc(g.tip) : ''}</div></div>
+        <div class="what"><span class="side">${cap(p.side)} ${p.line}</span><span class="muted">${odds(p.price)}</span>${book(p.book, p.link)}</div>
+        <div class="nums"><span>${sgn(p.edge * 100)}%<small>edge</small></span><span>${pct(p.p, 0)}<small>chance</small></span></div>
+        <div class="res outcome">${outcomeOf(p)}</div></div>`;
+    }).join('')}</div>
   </div>`;
 }
 
@@ -515,37 +540,43 @@ function renderSeasonStrip() {
 /* ---------- deep dive ---------- */
 
 function renderWhy() {
-  const p = DATA.pick;
-  $('why-sec').hidden = !p;
-  $('books-top').hidden = !p;
-  if (!p) return;
-  const L = ledgerEntry(), fin = L && L.points != null && settledResult(L.result) ? L.points : null;
+  const P = dayPicks();
+  $('why-sec').hidden = !P.length;
+  if (!P.length) return;
+  $('why-title').textContent = P.length > 1 ? 'Why these bets' : 'Why this bet';
+  document.querySelectorAll('#boost button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.b === BOOST));
+  $('why-list').innerHTML = P.map(whyBlock).join('');
+}
+
+function whyBlock(p) {
+  const L = ledgerFor(p), fin = L && L.points != null && settledResult(L.result) ? L.points : null;
   const lo = Math.floor(Math.min(p.proj - p.sigma, p.line - 2, fin ?? 99)), hi = Math.ceil(Math.max(p.proj + p.sigma, p.line + 2, fin ?? 0));
   const marks = [[p.proj, 'Projection ' + p.proj, 'var(--ink-2)'], [p.line, 'Line ' + p.line, 'var(--accent)']];
   if (fin != null) marks.push([fin, 'Final ' + fin, L.result === 'win' ? 'var(--win)' : 'var(--loss)']);
   marks.sort((a, b) => a[0] - b[0]);
   let lastUp = -1e9;
-  $('strip').innerHTML = '<div class="track"></div>' + marks.map(([v, t, c]) => {
+  const strip = '<div class="track"></div>' + marks.map(([v, t, c]) => {
     const x = (v - lo) / (hi - lo) * 100, down = x - lastUp < 18;
     if (!down) lastUp = x;
     return down ? `<div class="mk down" style="left:${x}%;color:${c}"><i></i>${t}</div>` : `<div class="mk up" style="left:${x}%;color:${c}">${t}<i></i></div>`;
   }).join('');
-  $('why').innerHTML = `Projects <b>${p.proj}</b> points (± ${p.sigma}) vs a <b>${p.line}</b> line.
-    ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.`;
-  document.querySelectorAll('#boost button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.b === BOOST));
-  $('boost-out').hidden = !BOOST;
+  let boost = '';
   if (BOOST) {
     const bp = boosted(p.price, BOOST), e = p.p - implied(bp), ev = p.p * payout(bp) - (1 - p.p);
-    $('boost-out').innerHTML = `With a ${BOOST * 100}% profit boost, ${odds(p.price)} becomes <b>${odds(bp)}</b>, which needs ${pct(implied(bp), 0)}.
+    boost = `<p class="why">With a ${BOOST * 100}% profit boost, ${odds(p.price)} becomes <b>${odds(bp)}</b>, which needs ${pct(implied(bp), 0)}.
       Edge <b class="${e >= 0.02 ? 'pos' : 'neg'}">${sgn(e * 100)}%</b> (from ${sgn(p.edge * 100)}%), about <b>${sgn(ev, 2)}u</b> expected per 1u bet.
-      <span class="small">Books round boosted odds differently; check the price on your slip.</span>`;
+      <span class="small">Books round boosted odds differently; check the price on your slip.</span></p>`;
   }
   // With a boost picked, the table shows each book's boosted price and edge (the boost is at whichever book you have it)
   const B = (p.books || []).map(b => !BOOST || b.edge === null ? b : { ...b, price: boosted(b.price, BOOST), edge: p.p - implied(boosted(b.price, BOOST)) });
   const best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
-  $('books-top').querySelector('.sub-h').textContent = BOOST ? `Same bet at each book, with a ${BOOST * 100}% boost` : 'Same bet at each book';
-  $('books').innerHTML = B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
-    <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('');
+  const books = B.length ? `<table class="books"><thead><tr><th>${BOOST ? `Each book, ${BOOST * 100}% boost` : 'Same bet at each book'}</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody>
+    ${B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
+      <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('')}</tbody></table>` : '';
+  return `<div class="whybet"><h3>${esc(p.player)} <span>${cap(p.side)} ${p.line}</span></h3>
+    <div class="strip" aria-hidden="true">${strip}</div>
+    <p class="why">Projects <b>${p.proj}</b> points (± ${p.sigma}) vs a <b>${p.line}</b> line.
+      ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.</p>${boost}${books}</div>`;
 }
 
 // Profit boost: the winnings are multiplied by (1 + boost). −114 pays 0.877 per unit; +50% makes it 1.316, i.e. +132.
@@ -565,10 +596,6 @@ const getOv = () => { try { return JSON.parse(store.get(ovKey()) || '{}'); } cat
 const setOv = o => store.set(ovKey(), JSON.stringify(o));
 const implied = a => a > 0 ? 100 / (a + 100) : -a / (-a + 100);
 const sdFor = proj => { const m = DATA.model; let i = 0; while (i < m.sd_cuts.length && proj >= m.sd_cuts[i]) i++; return m.sd[i]; };
-const stakeFor = (edge, gp) => {
-  let u = Math.min(1.5, Math.max(0.25, Math.round(edge / DATA.model.avg_edge * 4) / 4));
-  if (edge >= 0.08) u = Math.min(u, 1); if (gp < 20) u = Math.min(u, 0.5); return u;
-};
 const clampMin = v => Math.max(0, Math.min(48, Math.round(v * 2) / 2));
 
 /* ---------- who's playing: your in/out calls, re-projected by the real model (model.js) ---------- */
@@ -676,13 +703,13 @@ function scoredProps() {
     const base = score(x, null, false), mine = score(x, x.id in ov ? ov[x.id] : null);
     return holdSide({ ...mine, base });
   });
-  const top = [...rows].sort((a, b) => b.edge - a.edge).find(r => !r.skip && !r.ruledOut && r.edge >= DATA.model.min_edge);
   rows.forEach(r => {
-    r.play = r.ruledOut ? 'out' : r.skip ? 'skip' : r === top ? 'bet' : 'pass';
-    if (r === top) r.stake = stakeFor(r.edge, r.gp);
+    r.play = r.ruledOut ? 'out' : r.skip ? 'skip' : r.edge >= DATA.model.min_edge ? 'bet' : 'pass';
+    if (r.play === 'bet') r.stake = DATA.model.stake ?? 1;
   });
   rows.sort((a, b) => b.base.edge - a.base.edge);
-  return { rows, top, anyAdj: Object.keys(ov).length > 0 || Object.keys(getWho()).length > 0 };
+  const bets = rows.filter(r => r.play === 'bet').sort((a, b) => b.edge - a.edge);
+  return { rows, bets, anyAdj: Object.keys(ov).length > 0 || Object.keys(getWho()).length > 0 };
 }
 
 // If your minutes leave no bettable side, keep showing the model's side so you can see its edge fall away
@@ -724,7 +751,7 @@ function decisionCell(r) {
   if (r.play === 'out') return `<span class="dec-gone">Out</span> <span class="small why-sub">your call</span>`;
   if (r.play === 'skip') return `<span class="dec-skip">Skip</span> <span class="small why-sub">${esc(skipWhy(r.skip))}</span>`;
   if ((r.adj || r.lineupAdj) && r.edge < 0.02 && r.base.edge >= 0.02) return `<span class="dec-gone">No edge</span> <span class="small why-sub">${r.adj ? 'at ' + r.mins + ' min' : 'with your lineup'}</span>`;
-  return `<span class="dec-pass">Pass</span> <span class="small why-sub">${r.edge < 0.02 ? 'under 2%' : 'not top'}</span>`;
+  return `<span class="dec-pass">Pass</span> <span class="small why-sub">under 2%</span>`;
 }
 
 function renderBoard() {
@@ -827,21 +854,15 @@ function wireEditor() {
 function renderMine() {
   const box = $('mine');
   if (!(DATA.props && DATA.model)) { box.innerHTML = ''; return; }
-  const { rows, top, anyAdj } = scoredProps();
+  const { bets, anyAdj } = scoredProps();
   if (!anyAdj) { box.innerHTML = ''; return; }
-  const off = DATA.pick, offRow = off && rows.find(r => r.id === off.PLAYER_ID);
-  const same = off && top && top.id === off.PLAYER_ID && top.side === off.side;
-  const newPick = !top ? 'no bet today, nothing clears 2%'
-    : `<b>${esc(top.player)} ${cap(top.side)} ${top.line}</b> ${odds(top.price)} at ${esc(top.book)}, edge ${sgn(top.edge * 100)}%, ${top.stake}u`;
-  let lead = '';
-  if (off && offRow && (offRow.adj || offRow.lineupAdj) && !same) {
-    const why = offRow.adj ? `at ${offRow.mins} minutes` : 'with your lineup';
-    lead = offRow.ruledOut ? `<b>${esc(off.player)}</b> is out (your call). `
-      : offRow.edge < 0.02
-      ? `<b>${esc(off.player)} ${cap(off.side)} ${off.line}</b> has no edge ${why} (${sgn(offRow.base.edge * 100)}% → ${sgn(offRow.edge * 100)}%). `
-      : `<b>${esc(off.player)}</b> drops to ${sgn(offRow.edge * 100)}% ${why}. `;
-  }
-  box.innerHTML = `<div class="mine"><span class="tagline">With your changes</span> ${lead}${same ? 'The pick is unchanged: ' : lead ? 'Best bet instead: ' : 'Best bet: '}${newPick}.
+  const key = x => (x.PLAYER_ID ?? x.id) + x.side, official = new Set(dayPicks().map(key)), mine = new Set(bets.map(key));
+  const added = bets.filter(r => !official.has(key(r))), dropped = dayPicks().filter(p => !mine.has(key(p)));
+  const name = x => `<b>${esc(x.player)} ${cap(x.side)} ${x.line}</b>`;
+  const change = !added.length && !dropped.length ? 'The bets are unchanged.'
+    : [added.length ? 'Adds ' + added.map(r => `${name(r)} (${sgn(r.edge * 100)}%)`).join(', ') + '.' : '',
+       dropped.length ? 'Drops ' + dropped.map(name).join(', ') + '.' : ''].join(' ');
+  box.innerHTML = `<div class="mine"><span class="tagline">With your changes</span> ${bets.length ? `${bets.length} bet${bets.length > 1 ? 's' : ''}` : 'no bets, nothing clears 2%'}. ${change}
     <button class="textbtn" id="reset-all" type="button">Clear my changes</button></div>`;
   $('reset-all').onclick = () => { store.set(ovKey(), '{}'); store.set(whoKey(), '{}'); OPEN = null; renderWho(); renderBoard(); renderMine(); };
 }

@@ -1,20 +1,20 @@
 """The daily run: noon pick, closing line, next-morning settle. Writes the website's data file.
 
-    python daily_pipeline.py picks       # ~12:10 ET: noon odds + injury report -> one bet (or none)
-    python daily_pipeline.py close       # every ~10 min in the evening: closing line for the pick's game only
-    python daily_pipeline.py results     # next morning: box scores -> features -> settle the bet
+    python daily_pipeline.py picks       # ~12:15 ET: noon odds + injury report -> the day's bets (or none)
+    python daily_pipeline.py close       # every ~15 min in the evening: closing lines for games with a bet
+    python daily_pipeline.py results     # next morning: box scores -> features -> settle the bets
 
     python daily_pipeline.py picks --replay --date 2026-03-19     # replay a past day from stored data
     python daily_pipeline.py picks --replay --start 2026-03-01 --end 2026-03-31
 
-The pick follows the backtested rule exactly:
+The bets follow the backtested rule exactly:
   absences   noon injury report: Out/Doubtful count fully, Questionable half; teams that have not filed
              (noon, then previous evening) fall back to whoever missed their previous game
   skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back
-  bet        the single highest edge if >= 2%, at the best price among config.BOOKS
-  stake      edge / avg pick edge in quarter units, 0.25-1.5u; max 1u at 8%+ edges; max 0.5u under 20 games
+  bet        every remaining prop with an edge >= 2%, at the best price among config.BOOKS
+  stake      flat 1u each (the stake the multi-seed backtest validated; size the unit for ~3 bets a night)
 Outputs: data/site/picks.json (the website reads this), data/bet_log.csv. Replays write under data/replay/.
-Credits: about 1 per game at noon + 1 at close for the pick's game. Failures put an error banner in
+Credits: about 1 per game at noon + 1 at close for each game with a bet. Failures put an error banner in
 picks.json and show a Mac notification.
 """
 import argparse
@@ -41,6 +41,7 @@ from predict_today import ET, likely_out, load_schedule, predict_day, season_of
 ON_REPORT = {'Probable', 'Questionable', 'Doubtful'}
 WEIGHT = {'Out': 1.0, 'Doubtful': 1.0, 'Questionable': 0.5}
 MIN_EDGE = 0.02
+STAKE = 1.0
 REPORT_DIR = DATA / 'injury_reports'
 LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'commence_time', 'side', 'line', 'price',
             'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units']
@@ -162,13 +163,7 @@ def parse_live():
 
 # ---------------------------------------------------------------- the pick
 
-def stake_for(edge, gp, avg_edge):
-    u = float(np.clip(round(edge / avg_edge * 4) / 4, 0.25, 1.5))
-    u = min(u, 1.0) if edge >= 0.08 else u
-    return min(u, 0.5) if gp < 20 else u
-
-
-def make_board(f, status, avg_edge):
+def make_board(f, status):
     """Every prop with a line, scored, with what the rule does with it."""
     b = f.dropna(subset=['early_line', 'p_over']).copy()
     st = status.drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')['status']
@@ -182,22 +177,19 @@ def make_board(f, status, avg_edge):
     b['p_side'] = np.where(over, b['p_over'], 1 - b['p_over'])
     b['skip'] = np.select([b['status'].isin(ON_REPORT), b['rest_days'] == 1],
                           ['on injury report (' + b['status'].fillna('') + ')', 'back-to-back'], '')
-    el = b[b['skip'] == ''].sort_values('edge', ascending=False)
-    pick_idx = el.index[0] if len(el) and el['edge'].iloc[0] >= MIN_EDGE else None
-    b['play'] = np.where(b['skip'] != '', 'skip: ' + b['skip'], np.where(b['edge'] < MIN_EDGE, 'pass: edge < 2%',
-                                                                          'pass: not top pick'))
-    if pick_idx is not None:
-        p = b.loc[pick_idx]
-        b.loc[pick_idx, 'stake'] = stake_for(p['edge'], p['gp'], avg_edge)
-        b.loc[pick_idx, 'play'] = f"BET {p['side']} {b.loc[pick_idx, 'stake']:g}u"
-    return b.sort_values('edge', ascending=False), pick_idx
+    bet = (b['skip'] == '') & (b['edge'] >= MIN_EDGE)
+    b['play'] = np.where(b['skip'] != '', 'skip: ' + b['skip'], np.where(bet, 'BET ' + b['side'] + f' {STAKE:g}u',
+                                                                          'pass: edge < 2%'))
+    b['stake'] = np.where(bet, STAKE, np.nan)
+    b = b.sort_values('edge', ascending=False)
+    return b, list(b.index[bet.reindex(b.index)])
 
 
 def run_picks(day, paths, replay, now):
     games = pd.read_parquet(DATA / 'player_games.parquet')
     schedule = load_schedule(games, day, from_history=replay)
     site = {'date': str(day), 'updated': now.strftime('%Y-%m-%d %I:%M %p ET'), 'status': 'ok', 'message': '',
-            'pick': None, 'board': [], 'injuries': [], 'games': [], 'slate': {}}
+            'picks': [], 'board': [], 'injuries': [], 'games': [], 'slate': {}}
     if schedule.empty:
         site['message'] = 'No games today.'
         return site
@@ -212,33 +204,34 @@ def run_picks(day, paths, replay, now):
     if 'p_over' not in f:
         site['status'], site['message'] = 'error', 'No noon lines were found for today\'s games.'
         return site
-    board, pick_idx = make_board(f, status, om['avg_top_edge'])
+    board, bet_idx = make_board(f, status)
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['props'] = props_payload(board)
     site['model'] = model_payload(om)
     site['roster'] = roster_payload(games, day, schedule, weights, status, export_model(paths))
     check_browser_model(paths, site, f)
-    if pick_idx is None:
+    bets = []
+    for i in bet_idx:
+        p = board.loc[i]
+        bet = {'date': str(day), 'player': p['player_name'], 'PLAYER_ID': int(p['PLAYER_ID']), 'team': abbr(p['team']),
+               'opponent': abbr(team_names().get(p['OPP_ID'], '')), 'event_id': p.get('event_id'),
+               'commence_time': p.get('commence_time'), 'side': p['side'], 'line': float(p['early_line']),
+               'price': int(p['price']), 'book': BOOK_NAMES.get(p['book'], p['book']), 'p_side': round(float(p['p_side']), 4),
+               'edge': round(float(p['edge']), 4), 'stake': float(p['stake'])}
+        site['picks'].append({**bet, **row_payload(p), 'books': book_prices(p, replay),
+                              'link': link(p.get('early_best_over_link' if p['side'] == 'OVER' else 'early_best_under_link'))})
+        if replay and pd.notna(p.get('close_line')):        # replays know the close already
+            over = p['side'] == 'OVER'
+            bet['close_line'] = float(p['close_line'])
+            bet['close_novig_side'] = float(p['close_novig_over'] if over else 1 - p['close_novig_over'])
+            bet['clv'] = (bet['close_line'] - bet['line']) * (1 if over else -1)
+        bets.append(bet)
+    log_bets(paths, str(day), bets)
+    if not bets:
         top = board[board['skip'] == '']
         best = f"{top['edge'].iloc[0]:+.1%}" if len(top) else 'n/a'
-        site['message'] = f'No bet today: the best eligible edge is {best}, below the 2% minimum.'
-        return site
-
-    p = board.loc[pick_idx]
-    bet = {'date': str(day), 'player': p['player_name'], 'PLAYER_ID': int(p['PLAYER_ID']), 'team': abbr(p['team']),
-           'opponent': abbr(team_names().get(p['OPP_ID'], '')), 'event_id': p.get('event_id'),
-           'commence_time': p.get('commence_time'), 'side': p['side'], 'line': float(p['early_line']),
-           'price': int(p['price']), 'book': BOOK_NAMES.get(p['book'], p['book']), 'p_side': round(float(p['p_side']), 4),
-           'edge': round(float(p['edge']), 4), 'stake': float(p['stake'])}
-    site['pick'] = {**bet, **row_payload(p), 'books': book_prices(p, replay),
-                    'link': link(p.get('early_best_over_link' if p['side'] == 'OVER' else 'early_best_under_link'))}
-    if replay and pd.notna(p.get('close_line')):            # replays know the close already
-        over = p['side'] == 'OVER'
-        bet['close_line'] = float(p['close_line'])
-        bet['close_novig_side'] = float(p['close_novig_over'] if over else 1 - p['close_novig_over'])
-        bet['clv'] = (bet['close_line'] - bet['line']) * (1 if over else -1)
-    log_bet(paths, bet)
+        site['message'] = f'No bets today: the best eligible edge is {best}, below the 2% minimum.'
     return site
 
 
@@ -354,7 +347,7 @@ def roster_payload(games, day, schedule, weights, status, cols):
 def model_payload(om):
     """Classifier coefficients, stake scale and the projection-uncertainty table (for in-browser re-projection)."""
     pm = joblib.load(DATA / 'models' / 'points_model.pkl')
-    return {'b0': om['b0'], 'b_gap': om['b_gap'], 'b_z': om['b_z'], 'avg_edge': om['avg_top_edge'], 'min_edge': MIN_EDGE,
+    return {'b0': om['b0'], 'b_gap': om['b_gap'], 'b_z': om['b_z'], 'stake': STAKE, 'min_edge': MIN_EDGE,
             'sd_cuts': [round(float(x), 3) for x in pm['bins'][1:-1]], 'sd': [round(float(x), 3) for x in pm['sd']]}
 
 
@@ -405,43 +398,45 @@ def read_log(paths):
                        'points': float, 'units': float})
 
 
-def log_bet(paths, bet):
+def log_bets(paths, day, bets):
     log = read_log(paths)
-    log = log[log['date'].astype(str) != bet['date']]          # a rerun replaces that day's pick
-    new = pd.DataFrame([bet]).reindex(columns=LOG_COLS)
-    log = new if log.empty else pd.concat([log, new], ignore_index=True)
+    log = log[log['date'].astype(str) != day]                  # a rerun replaces that day's bets
+    new = pd.DataFrame(bets).reindex(columns=LOG_COLS)
+    log = new if log.empty else pd.concat([log, new], ignore_index=True) if len(new) else log
     log.to_csv(paths.log, index=False)
 
 
 def run_close(paths, window_min):
-    """Closing snapshot for today's pick only, once its game is within `window_min` of tip."""
+    """Closing snapshots for today's bets: one per game, once that game is within `window_min` of tip."""
     log = read_log(paths)
     today = str(dt.datetime.now(ET).date())
     todo = log[(log['date'].astype(str) == today) & log['close_line'].isna()]
     if todo.empty:
-        return 'no open pick needing a close line'
-    b = todo.iloc[0]
-    tip = pd.Timestamp(b['commence_time'])
+        return 'no open bet needing a close line'
     now = pd.Timestamp.now(tz='UTC')
-    if not (now < tip <= now + pd.Timedelta(minutes=window_min)):
-        return f"not yet: tip {tip.tz_convert(ET):%I:%M %p} ET"
+    tips = todo.groupby('event_id')['commence_time'].first().map(pd.Timestamp)
+    due = tips[(tips > now) & (tips <= now + pd.Timedelta(minutes=window_min))]
+    if due.empty:
+        return 'not yet: next tip ' + f"{tips[tips > now].min().tz_convert(ET):%I:%M %p} ET" if (tips > now).any() else 'no game left to close'
     from daily_logger import snapshot
     from odds_api import OddsAPI
     api = OddsAPI()
-    snapshot(api, [{'id': b['event_id'], 'commence_time': tip.strftime('%Y-%m-%dT%H:%M:%SZ')}], 'close')
+    snapshot(api, [{'id': e, 'commence_time': t.strftime('%Y-%m-%dT%H:%M:%SZ')} for e, t in due.items()], 'close')
     parse_live()
     lines = pd.read_parquet(DATA / 'live' / 'odds_lines.parquet')
-    row = lines[(lines['event_id'] == b['event_id']) & (lines['player'].map(norm) == norm(b['player']))]
-    if row.empty or pd.isna(row['close_line'].iloc[0]):
-        return 'close snapshot saved, but the prop was no longer listed'
-    r = row.iloc[0]
-    over = b['side'] == 'OVER'
-    i = log.index[(log['date'].astype(str) == today)][0]
-    log.loc[i, 'close_line'] = r['close_line']
-    log.loc[i, 'close_novig_side'] = r['close_novig_over'] if over else 1 - r['close_novig_over']
-    log.loc[i, 'clv'] = (r['close_line'] - b['line']) * (1 if over else -1)    # points the line moved our way
+    done = []
+    for i, b in todo[todo['event_id'].isin(due.index)].iterrows():
+        row = lines[(lines['event_id'] == b['event_id']) & (lines['player'].map(norm) == norm(b['player']))]
+        if row.empty or pd.isna(row['close_line'].iloc[0]):
+            done.append(f"{b['player']}: no longer listed")
+            continue
+        r, over = row.iloc[0], b['side'] == 'OVER'
+        log.loc[i, 'close_line'] = r['close_line']
+        log.loc[i, 'close_novig_side'] = r['close_novig_over'] if over else 1 - r['close_novig_over']
+        log.loc[i, 'clv'] = (r['close_line'] - b['line']) * (1 if over else -1)    # points the line moved our way
+        done.append(f"{b['player']} close {r['close_line']} ({log.loc[i, 'clv']:+.1f})")
     log.to_csv(paths.log, index=False)
-    return f"close line {r['close_line']} (moved {log.loc[i, 'clv']:+.1f} our way)"
+    return 'close line ' + '; '.join(done)
 
 
 def settle(paths, games):
@@ -556,12 +551,12 @@ def main():
                 if args.replay:
                     settle(paths, games)            # replays know the result already
                 write_site(paths, site)
-                p = site['pick']
-                print(f"{day}: " + (f"BET {p['player']} {p['side']} {p['line']} @ {p['price']:+d} {p['book']} | "
-                                     f"edge {p['edge']:+.1%} | {p['stake']:g}u" if p else site['message']), flush=True)
-            if not args.replay and site['pick']:
-                notify(f"{site['pick']['player']} {site['pick']['side'].lower()} {site['pick']['line']} "
-                       f"({site['pick']['stake']:g}u)")
+                print(f"{day}: " + ('; '.join(f"BET {p['player']} {p['side']} {p['line']} @ {p['price']:+d} {p['book']} "
+                                              f"(edge {p['edge']:+.1%}, {p['stake']:g}u)" for p in site['picks'])
+                                    or site['message']), flush=True)
+            if not args.replay and site['picks']:
+                notify(f"{len(site['picks'])} bet(s): " + ', '.join(f"{p['player']} {p['side'].lower()} {p['line']}"
+                                                                   for p in site['picks']))
         elif args.mode == 'close':
             msg = run_close(paths, args.window)
             print(msg)

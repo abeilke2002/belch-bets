@@ -124,7 +124,7 @@ section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
       <span class="label">Methodology</span>
       <h1>How a pick is made</h1>
       <p class="lede">Every game day at noon ET, a model reads the official injury report and the player-points lines at four
-        sportsbooks, then makes at most one bet. This page explains each step, the rule it follows, and how it has done.</p>
+        sportsbooks, then bets every prop where it finds enough of an edge. This page explains each step, the rule it follows, and how it has done.</p>
     </div>
 
     <section id="short">
@@ -132,10 +132,10 @@ section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
       <p>Sportsbooks are good at setting lines, so the model doesn't try to out-guess them from scratch. It starts from what the
         books' prices say, then adjusts a little when its own points projection disagrees with the line. When that adjusted
         probability beats the best available price by at least 2 percentage points, and the player is in a clean spot, it bets.
-        It only ever takes the single best spot of the day.</p>
+        It bets every spot that clears that bar, usually a few a night, at the same stake each.</p>
       <figure>
         <div class="flow-wrap">
-        <svg viewBox="0 0 980 230" role="img" aria-label="Pipeline: box scores and the noon injury report produce a points projection; sportsbook prices produce a market probability; together they give the model's probability, which is compared to the best price to get an edge; filters and a 2 percent minimum leave at most one bet a day.">
+        <svg viewBox="0 0 980 230" role="img" aria-label="Pipeline: box scores and the noon injury report produce a points projection; sportsbook prices produce a market probability; together they give the model's probability, which is compared to the best price to get an edge; filters and a 2 percent minimum decide the day's bets.">
           <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
           <g fill="none" stroke="currentColor" stroke-width="1.5">
             <rect x="10" y="20" width="170" height="56" rx="8"/>
@@ -159,7 +159,7 @@ section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
             <text x="320" y="175" font-weight="700">Market probability</text><text x="320" y="193" font-size="11.5" opacity=".7">vig removed</text>
             <text x="535" y="110" font-weight="700">Model probability</text><text x="535" y="128" font-size="11.5" opacity=".7">market, nudged</text>
             <text x="735" y="110" font-weight="700">Edge</text><text x="735" y="128" font-size="11.5" opacity=".7">vs best price</text>
-            <text x="910" y="110" font-weight="700" fill="#f0a050">One bet</text><text x="910" y="128" font-size="11.5" opacity=".7">if edge ≥ 2%</text>
+            <text x="910" y="110" font-weight="700" fill="#f0a050">Bets</text><text x="910" y="128" font-size="11.5" opacity=".7">every edge ≥ 2%</text>
           </g>
           <g fill="currentColor" font-family="Libre Franklin, Helvetica Neue, Arial, sans-serif" font-size="11" opacity=".75">
             <text x="430" y="40">gap to line</text>
@@ -238,54 +238,53 @@ edge = P(side) − break-even(best price)</div>
     </section>
 
     <section id="rule">
-      <h2><span class="step">04</span> The daily bet</h2>
-      <p>Out of every prop on the slate, the rule picks at most one:</p>
+      <h2><span class="step">04</span> The daily bets</h2>
+      <p>Out of every prop on the slate, the rule bets every one that passes all three:</p>
       <div class="grid3">
         <div class="card"><h3>Skip injury-report players</h3><p class="muted">Anyone listed Probable, Questionable or Doubtful
           at noon. Their minutes are a coin flip and the lines move late.</p></div>
         <div class="card"><h3>Skip back-to-backs</h3><p class="muted">Second night of back-to-back games: rest decisions and
           minute limits make these the least predictable props.</p></div>
-        <div class="card"><h3>Take the top edge, if ≥ 2%</h3><p class="muted">Only the single highest remaining edge, and only if
-          it clears 2%. About 4 days in 10 have no bet.</p></div>
+        <div class="card"><h3>Edge of 2% or more</h3><p class="muted">Every remaining prop that clears 2% is a bet. In testing
+          that was about three a night on average, more on busy nights, and some nights none.</p></div>
       </div>
-      <p>Why only one? In testing, the day's second-best pick won about half the time and lost money on its own. The edge
-        is concentrated at the very top of the list.</p>
+      <p>Why all of them and not just the best one? The whole model was retrained 10 different ways and replayed on three
+        seasons. Betting every 2%+ edge made money in all 10 runs; taking only the day's top edge swung from a loss to a profit
+        depending on the run. More bets spread the luck out.</p>
     </section>
 
     <section id="stake">
       <h2><span class="step">05</span> Stake size</h2>
-      <p>Bigger edges get bigger bets, measured in units (1 unit = your standard bet).</p>
-      <ul>
-        <li><b>Stake = edge ÷ 3.2%</b>, rounded to the nearest quarter unit, between 0.25u and 1.5u. A typical pick's edge is
-          about 3.2%, so the average bet is about 1 unit.</li>
-        <li><b>Capped at 1u when the edge is 8% or more.</b> The biggest edges are usually a fringe player whose line has
-          jumped because the books expect a bigger role. Those still win often enough to bet, but the model overrates them.</li>
-        <li><b>Capped at 0.5u until the player has played 20 games</b> this season, while his averages are still noisy.</li>
-      </ul>
+      <p><b>Every bet is 1 unit.</b> The model overstates small edges: bets it rated 2% to 4% beat break-even by only about
+        1% in testing, so sizing up on its confidence isn't justified. With several bets a night, make your unit smaller than
+        you would for a single pick. A quarter to a half of a normal bet is a sensible start.</p>
     </section>
 
     <section id="record">
       <h2>Track record so far</h2>
       <p>This is a backtest: the rule replayed on three past seasons, using only noon information and models that hadn't
-        seen the season being tested (for 2023-24, models trained on the later seasons). Picks and stakes follow the
-        site's rules above. It is not live betting. The History tab lists every one of the 2024-25 and 2025-26 bets.</p>
+        seen the season being tested (for 2023-24, the over/under model was trained on the later seasons). It is not live
+        betting. Small changes to the model move these numbers a lot, so each one is the average of 10 retrainings.
+        The History tab lists every bet from one of those runs.</p>
       <div class="card tablewrap">
         <table>
           <thead><tr><th>Season</th><th class="r">Bets</th><th class="r">Win rate</th><th class="r">Units</th></tr></thead>
           <tbody>
-            <tr><td>2023-24</td><td class="r">107</td><td class="r">54.2%</td><td class="r pos">+14.6</td></tr>
-            <tr><td>2024-25</td><td class="r">152</td><td class="r">56.6%</td><td class="r pos">+18.5</td></tr>
-            <tr><td>2025-26</td><td class="r">137</td><td class="r">56.9%</td><td class="r pos">+11.7</td></tr>
-            <tr class="total"><td>Total</td><td class="r">396</td><td class="r">56.1%</td><td class="r pos">+44.8</td></tr>
+            <tr><td>2023-24</td><td class="r">285</td><td class="r">53.4%</td><td class="r pos">+17.3</td></tr>
+            <tr><td>2024-25</td><td class="r">696</td><td class="r">52.9%</td><td class="r pos">+10.0</td></tr>
+            <tr><td>2025-26</td><td class="r">359</td><td class="r">53.4%</td><td class="r pos">+9.9</td></tr>
+            <tr class="total"><td>Total</td><td class="r">1,340</td><td class="r">53.1%</td><td class="r pos">+37.3</td></tr>
           </tbody>
         </table>
       </div>
-      <p>That's a return of about +12% on units risked. The statistical range is wide, roughly +2% to +23%, so treat it as
-        promising, not proven. The worst losing stretch was about 9 units. One caution: the model running live was refit on
-        all three seasons and leans on the projection about half as much as these backtest models did, because the
-        projection's edge was weaker in 2025-26. Expect fewer bets than the backtest shows. The site's season tracker shows the live record,
-        including how often the line moved in our favor before tip-off (closing line value), which is the earliest sign of
-        whether the edge is real.</p>
+      <p>That's about +2.8% per bet, against a break-even win rate of about 51.7%. The statistical range runs from roughly
+        −2% to +8%, so it's likely but not proven to be profitable. Expect long cold spells: the worst losing stretch
+        averaged about 24 units.</p>
+      <p>The strongest evidence isn't the profit. Between noon and tip-off, the market moved toward the model's side 58% of
+        the time and away from it 42%, in every season and every retraining. That is very unlikely to be luck, and it means
+        the projections spot prices the market later corrects. Whether that edge is big enough to beat the books' margin is
+        what this season will show. One caution: the model running live was refit on all three seasons and leans on the
+        projection about half as much as these backtest models did, so expect fewer bets than the backtest shows.</p>
     </section>
 
     <section id="limits">
@@ -295,7 +294,7 @@ edge = P(side) − break-even(best price)</div>
           made.</li>
         <li><b>Role changes the box score hasn't shown yet.</b> When a bench player's line jumps because a star is out, the
           books often know he's moving into the rotation; the model only knows his history. These "fade the jump" bets have
-          been profitable, but the model's confidence in them runs too high, which is what the 8% cap is for.</li>
+          been profitable, but the model's confidence in them runs too high.</li>
         <li><b>The first weeks of a season</b>, when averages rest on a handful of games.</li>
         <li><b>Anything a sportsbook knows that public data doesn't.</b> That's why the model leans on the market instead of
           replacing it.</li>
@@ -313,7 +312,7 @@ edge = P(side) − break-even(best price)</div>
           <dt>Projection ± σ</dt><dd>The model's expected points, and its typical miss for a projection that size.</dd>
           <dt>Market P / Model P</dt><dd>The books' probability of the over, and the model's probability of the side it picks.</dd>
           <dt>Edge</dt><dd>Model probability minus the break-even of the best price. 2% is the minimum to bet.</dd>
-          <dt>Unit (u)</dt><dd>Your standard bet size. Stakes run 0.25u to 1.5u.</dd>
+          <dt>Unit (u)</dt><dd>Your standard bet size. Every bet is 1 unit.</dd>
           <dt>Closing line / CLV</dt><dd>The line right before tip-off. If it moved toward our side (e.g. we took under 14.5 and
             it closed 13.5), the market came around to our view: a good sign even when a single bet loses.</dd>
           <dt>Back-to-back</dt><dd>A team's second game on consecutive nights.</dd>
