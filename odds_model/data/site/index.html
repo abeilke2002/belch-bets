@@ -720,7 +720,8 @@ function holdSide(r) {
            price: under ? r.under[0] : r.over[0], book: under ? r.under[1] : r.over[1], link: under ? r.under[2] : r.over[2] };
 }
 
-const skipWhy = s => s === 'back-to-back' ? 'back-to-back' : (s.match(/\((\w+)\)/) || [, 'injury report'])[1].toLowerCase();
+const skipWhy = s => s === 'back-to-back' ? 'back-to-back' : s.startsWith('last two weeks') ? 'season end'
+  : (s.match(/\((\w+)\)/) || [, 'injury report'])[1].toLowerCase();
 
 // What your minutes did to this prop, in words
 function verdict(r) {

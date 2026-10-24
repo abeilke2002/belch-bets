@@ -3,7 +3,7 @@
     python build_history.py            # about 5 minutes: rebuilds the noon projections from current data
 
 Out-of-sample backtest of the site's rule: every prop not on the injury report or a back-to-back with an edge
->= 2%, flat 1u, at the best noon price. Projections ('half' injury policy, damping) and the classifier (market
+>= 2%, flat 1u, at the best noon price, and nothing from April 1 on (daily_pipeline.season_end). Projections ('half' injury policy, damping) and the classifier (market
 fixed + recent-weighted) are both trained only on earlier seasons. 2023-24 is left out: it has no earlier lines,
 so its classifier would have to be trained on later seasons. The live season comes from picks.json.
 SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robustness run, 2026-10-23); the History
@@ -31,7 +31,7 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
 PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
 MIN_EDGE, STAKE = 0.02, 1.0
-SPREAD = {'2025-26': (2.8, 0.4, 5.6, 9.9), '2024-25': (1.5, 0.0, 2.9, 10.0)}
+SPREAD = {'2025-26': (2.1, -0.7, 4.5, 7.2), '2024-25': (4.8, 3.3, 6.2, 30.3)}     # 10-seed avg/min/max %/bet, avg units
 abbr = lambda full: next((a for nick, a in TEAM_ABBR.items() if str(full).endswith(nick)), str(full))
 
 
@@ -66,7 +66,8 @@ def season_bets(d, test, train):
     eo = te['p'] - american_to_prob(te['early_best_over_price'])
     eu = (1 - te['p']) - american_to_prob(te['early_best_under_price'])
     te['over_side'], te['edge'] = eo >= eu, np.maximum(eo, eu)
-    b = te[~te['status'].isin(['Probable', 'Questionable', 'Doubtful']) & (te['rest_days'] != 1) & (te['edge'] >= MIN_EDGE)]
+    april_on = pd.to_datetime(te['GAME_DATE']).dt.month.isin([4, 5, 6])          # the site sits out the season's end
+    b = te[~te['status'].isin(['Probable', 'Questionable', 'Doubtful']) & (te['rest_days'] != 1) & (te['edge'] >= MIN_EDGE) & ~april_on]
     b = b.sort_values(['GAME_DATE', 'edge'], ascending=[True, False])
     over = b['over_side'].values
     price = np.where(over, b['early_best_over_price'], b['early_best_under_price']).astype(int)

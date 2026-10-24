@@ -248,6 +248,10 @@ edge = P(side) − break-even(best price)</div>
         <div class="card"><h3>Edge of 2% or more</h3><p class="muted">Every remaining prop that clears 2% is a bet. In testing
           that was about three a night on average, more on busy nights, and some nights none.</p></div>
       </div>
+      <p><b>And no bets at all from April 1 to the end of the regular season</b>, about its last two weeks. Teams rest
+        starters, tank and try out young players, so bench players' lines jump with their new minutes. The books see it
+        coming; the model only knows each player's season-long role and bets the under. In testing those April unders lost
+        heavily in two of three seasons, and the line moved against them after noon in all three.</p>
       <p>Why all of them and not just the best one? The whole model was retrained 10 different ways and replayed on three
         seasons. Betting every 2%+ edge made money in all 10 runs; taking only the day's top edge swung from a loss to a profit
         depending on the run. More bets spread the luck out.</p>
@@ -265,23 +269,26 @@ edge = P(side) − break-even(best price)</div>
       <p>This is a backtest: the rule replayed on three past seasons, using only noon information and models that hadn't
         seen the season being tested (for 2023-24, the over/under model was trained on the later seasons). It is not live
         betting. Small changes to the model move these numbers a lot, so each one is the average of 10 retrainings.
-        The History tab lists every bet from one of those runs.</p>
+        The History tab lists every bet from one of those runs. All seasons follow today's rules, including the April
+        sit-out, which was found by looking at these same seasons, so the totals flatter it somewhat.</p>
       <div class="card tablewrap">
         <table>
           <thead><tr><th>Season</th><th class="r">Bets</th><th class="r">Win rate</th><th class="r">Units</th></tr></thead>
           <tbody>
-            <tr><td>2023-24</td><td class="r">285</td><td class="r">53.4%</td><td class="r pos">+17.3</td></tr>
-            <tr><td>2024-25</td><td class="r">696</td><td class="r">52.9%</td><td class="r pos">+10.0</td></tr>
-            <tr><td>2025-26</td><td class="r">359</td><td class="r">53.4%</td><td class="r pos">+9.9</td></tr>
-            <tr class="total"><td>Total</td><td class="r">1,340</td><td class="r">53.1%</td><td class="r pos">+37.3</td></tr>
+            <tr><td>2023-24*</td><td class="r">261</td><td class="r">55.2%</td><td class="r pos">+25.3</td></tr>
+            <tr><td>2024-25</td><td class="r">626</td><td class="r">54.6%</td><td class="r pos">+30.3</td></tr>
+            <tr><td>2025-26</td><td class="r">337</td><td class="r">53.1%</td><td class="r pos">+7.2</td></tr>
+            <tr class="total"><td>2024-26</td><td class="r">963</td><td class="r">54.1%</td><td class="r pos">+37.5</td></tr>
           </tbody>
         </table>
       </div>
-      <p>That's about +2.8% per bet, against a break-even win rate of about 51.7%. The statistical range runs from roughly
-        −2% to +8%, so it's likely but not proven to be profitable. Expect long cold spells: the worst losing stretch
-        averaged about 24 units.</p>
-      <p>The strongest evidence isn't the profit. Between noon and tip-off, the market moved toward the model's side 58% of
-        the time and away from it 42%, in every season and every retraining. That is very unlikely to be luck, and it means
+      <p>*2023-24 is the oldest season with sportsbook lines, so its over/under model could only be trained on the two
+        later seasons. It's shown for reference and left out of the total.</p>
+      <p>Over 2024-26 that's about +3.9% per bet, against a break-even win rate of about 52%. The statistical range runs
+        from roughly −2% to +10%, so it's likely but not proven to be profitable. Expect long cold spells: the worst losing
+        stretch averaged about 18 units.</p>
+      <p>The strongest evidence isn't the profit. Between noon and tip-off, the market moved toward the model's side about 59%
+        of the time and away from it 41%, in every season and every retraining. That is very unlikely to be luck, and it means
         the projections spot prices the market later corrects. Whether that edge is big enough to beat the books' margin is
         what this season will show. One caution: the model running live was refit on all three seasons and leans on the
         projection about half as much as these backtest models did, so expect fewer bets than the backtest shows.</p>
@@ -296,6 +303,8 @@ edge = P(side) − break-even(best price)</div>
           books often know he's moving into the rotation; the model only knows his history. These "fade the jump" bets have
           been profitable, but the model's confidence in them runs too high.</li>
         <li><b>The first weeks of a season</b>, when averages rest on a handful of games.</li>
+        <li><b>The end of the regular season</b>, when rotations change for reasons the box score can't show. That's why the
+          site sits out April.</li>
         <li><b>Anything a sportsbook knows that public data doesn't.</b> That's why the model leans on the market instead of
           replacing it.</li>
       </ul>

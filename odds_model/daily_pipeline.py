@@ -10,7 +10,8 @@
 The bets follow the backtested rule exactly:
   absences   noon injury report: Out/Doubtful count fully, Questionable half; teams that have not filed
              (noon, then previous evening) fall back to whoever missed their previous game
-  skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back
+  skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back;
+             no bets at all from April 1 to the end of the regular season (rotations change, the books know first)
   bet        every remaining prop with an edge >= 2%, at the best price among config.BOOKS
   stake      flat 1u each (the stake the multi-seed backtest validated; size the unit for ~3 bets a night)
 Outputs: data/site/picks.json (the website reads this), data/bet_log.csv. Replays write under data/replay/.
@@ -163,7 +164,14 @@ def parse_live():
 
 # ---------------------------------------------------------------- the pick
 
-def make_board(f, status):
+def season_end(day):
+    """April 1 through the end of the regular season (about its last two weeks): teams rest starters and tank, bench
+    players' lines jump with their minutes, and the model's unders lost in two of three backtest Aprils, with the
+    closing line against it in all three."""
+    return day.month in (4, 5, 6)
+
+
+def make_board(f, status, day):
     """Every prop with a line, scored, with what the rule does with it."""
     b = f.dropna(subset=['early_line', 'p_over']).copy()
     st = status.drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')['status']
@@ -175,8 +183,8 @@ def make_board(f, status):
     b['price'] = np.where(over, b['early_best_over_price'], b['early_best_under_price'])
     b['book'] = np.where(over, b['early_best_over_book'], b['early_best_under_book'])
     b['p_side'] = np.where(over, b['p_over'], 1 - b['p_over'])
-    b['skip'] = np.select([b['status'].isin(ON_REPORT), b['rest_days'] == 1],
-                          ['on injury report (' + b['status'].fillna('') + ')', 'back-to-back'], '')
+    b['skip'] = np.select([np.full(len(b), season_end(day)), b['status'].isin(ON_REPORT), b['rest_days'] == 1],
+                          ['last two weeks of the season', 'on injury report (' + b['status'].fillna('') + ')', 'back-to-back'], '')
     bet = (b['skip'] == '') & (b['edge'] >= MIN_EDGE)
     b['play'] = np.where(b['skip'] != '', 'skip: ' + b['skip'], np.where(bet, 'BET ' + b['side'] + f' {STAKE:g}u',
                                                                           'pass: edge < 2%'))
@@ -204,7 +212,7 @@ def run_picks(day, paths, replay, now):
     if 'p_over' not in f:
         site['status'], site['message'] = 'error', 'No noon lines were found for today\'s games.'
         return site
-    board, bet_idx = make_board(f, status)
+    board, bet_idx = make_board(f, status, day)
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['props'] = props_payload(board)
@@ -228,7 +236,10 @@ def run_picks(day, paths, replay, now):
             bet['clv'] = (bet['close_line'] - bet['line']) * (1 if over else -1)
         bets.append(bet)
     log_bets(paths, str(day), bets)
-    if not bets:
+    if not bets and season_end(day):
+        site['message'] = ('No bets: the site sits out April 1 to the end of the regular season, when teams rest '
+                           'starters and rotations change faster than the model can follow.')
+    elif not bets:
         top = board[board['skip'] == '']
         best = f"{top['edge'].iloc[0]:+.1%}" if len(top) else 'n/a'
         site['message'] = f'No bets today: the best eligible edge is {best}, below the 2% minimum.'
