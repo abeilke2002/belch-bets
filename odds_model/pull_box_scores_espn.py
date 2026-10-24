@@ -124,6 +124,14 @@ def made_att(s):
         return 0, 0
 
 
+def num(x):
+    """A box-score number; ESPN shows '--' (or nothing) for a player who appeared without a recorded stat."""
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def game_rows(event_id, teams, match):
     s = get(f'{API}/summary', event=event_id)
     comp = s['header']['competitions'][0]
@@ -149,7 +157,7 @@ def game_rows(event_id, teams, match):
             fgm, fga = made_att(v.get('FG', '0-0'))
             tpm, tpa = made_att(v.get('3PT', '0-0'))
             ftm, fta = made_att(v.get('FT', '0-0'))
-            mins = 0 if p['dnp'] else int(float(v.get('MIN') or 0))
+            mins = 0 if p['dnp'] else int(num(v.get('MIN')))
             if not p['dnp'] and mins == 0 and v.get('MIN') not in (None, '', '--'):
                 mins = 0.5                           # checked in for seconds: ESPN rounds to 0, but he played
             reason = p['reason'].upper()
@@ -158,7 +166,7 @@ def game_rows(event_id, teams, match):
                         'PLAYER_ID': match(p['id'], p['name'], tid), 'firstName': p['first'], 'familyName': p['last'],
                         'comment': comment, 'minutes': (f'{int(mins)}:{int(mins % 1 * 60):02d}') if mins else '',
                         'position': 'S' if p['starter'] else '',
-                        'points': int(float(v.get('PTS') or 0)), 'fieldGoalsMade': fgm, 'fieldGoalsAttempted': fga,
+                        'points': int(num(v.get('PTS'))), 'fieldGoalsMade': fgm, 'fieldGoalsAttempted': fga,
                         'threePointersMade': tpm, 'threePointersAttempted': tpa,
                         'freeThrowsMade': ftm, 'freeThrowsAttempted': fta})
     return box, info, when
