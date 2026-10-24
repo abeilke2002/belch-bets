@@ -474,6 +474,37 @@ def settle(paths, games):
     return n
 
 
+def finals_for(games, site):
+    """Final points for every prop on a day's board: {'ids': {PLAYER_ID: pts}, 'names': {name: pts}}, None = DNP.
+    None if that day's box scores aren't in yet."""
+    g = games[games['GAME_DATE'] == pd.Timestamp(site['date'])]
+    if g.empty:
+        return None
+    pts = lambda r: float(r['points']) if r['played'] else None
+    ids = {int(r['PLAYER_ID']): pts(r) for _, r in g.iterrows()}
+    names = {r['player_name']: pts(r) for _, r in g.iterrows()}
+    want_ids = {int(p['id']) for p in site.get('props') or []}
+    want_names = {b['player'] for b in site.get('board') or []}
+    return {'ids': {str(i): v for i, v in ids.items() if i in want_ids},
+            'names': {n: v for n, v in names.items() if n in want_names}}
+
+
+def add_finals(paths, games, site, days=3):
+    """The edge board's results: final points on the current page and the last few days' saved pages."""
+    n = 0
+    if f := finals_for(games, site):                    # recomputed each run: an early run may have caught games still on
+        site['finals'] = f; n += 1
+    hist = paths.site / 'history'
+    for path in sorted(hist.glob('20*.json'))[-days:]:
+        if path.stem == site['date']:
+            continue                                     # written by write_site from `site`
+        day = json.loads(path.read_text())
+        if f := finals_for(games, day):
+            day['finals'] = f
+            path.write_text(json.dumps(day, default=str)); n += 1
+    return n
+
+
 def run_results():
     season = season_of(dt.datetime.now(ET).date() - dt.timedelta(days=1))
     # ESPN, not stats.nba.com: the NBA's sites refuse cloud servers (GitHub Actions)
@@ -583,11 +614,13 @@ def main():
             site = clear_error(json.loads((paths.site / 'picks.json').read_text()))
             write_site(paths, site)
         else:
-            n = settle(paths, run_results())
+            games = run_results()
+            n = settle(paths, games)
             path = paths.site / 'picks.json'
             site = clear_error(json.loads(path.read_text())) if path.exists() else {'date': str(stamp.date())}
+            k = add_finals(paths, games, site)
             write_site(paths, site)
-            print(f'settled {n} bet(s)')
+            print(f'settled {n} bet(s); final points on {k} day(s) of edge boards')
         if not args.replay and not args.no_deploy:
             print(deploy(paths))
     except Exception as e:

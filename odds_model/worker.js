@@ -1,5 +1,5 @@
 // The site's Worker: serves the static pages (data/site) to anyone with the private link, and starts the daily
-// picks run at 12:15 PM ET (scheduled(), crons in wrangler.jsonc).
+// runs on time (scheduled(), crons in wrangler.jsonc): results at 9:00 AM ET, picks at 12:15 PM ET.
 //
 // Private link: https://<site>/?k=<VIEW_KEY>. Opening it sets a cookie for 400 days (the browser maximum) and
 // redirects to the plain address, so later visits from that browser just work. Without the key or the cookie
@@ -38,16 +38,17 @@ export default {
     return out;
   },
 
-  // The daily 12:15 PM ET picks run. GitHub's own schedule starts hours late; a dispatch starts within a minute.
-  // Cron times are UTC, so both 16:15 and 17:15 fire and only the one that is 12:15 in New York (EDT or EST) dispatches.
+  // GitHub's own schedule starts runs hours late; a dispatch starts within a minute. Cron times are UTC, so each run
+  // has two crons (EDT and EST) and only the one at the right New York hour dispatches: 9 -> results, 12 -> picks.
   async scheduled(controller, env, ctx) {
-    const hour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
-      .format(new Date(controller.scheduledTime));
-    if (Number(hour) !== 12) return;
+    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
+      .format(new Date(controller.scheduledTime)));
+    const mode = { 9: 'results', 12: 'picks' }[hour];
+    if (!mode) return;
     const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
-      method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode: 'picks' } }),
+      method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode } }),
       headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json',
                  'x-github-api-version': '2022-11-28', 'user-agent': 'belch-bets-worker' } });
-    if (r.status !== 204) throw new Error(`picks dispatch: GitHub said ${r.status}`);
+    if (r.status !== 204) throw new Error(`${mode} dispatch: GitHub said ${r.status}`);
   },
 };

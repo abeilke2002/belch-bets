@@ -256,6 +256,8 @@ body[data-view="history"] :is(.hero, #mine, #season, #banner, .daynav, #flag) { 
 .was { color: var(--muted); }
 .arrow { color: var(--muted); margin: 0 2px; }
 .dec-gone { color: var(--loss); font-weight: 600; }
+.fin { display: block; font-size: 12.5px; font-weight: 600; margin-top: 2px; }
+.fin.win { color: var(--win); } .fin.loss { color: var(--loss); } .fin.other { color: var(--muted); font-weight: 500; }
 .board tr.is-gone .betcell { color: var(--muted); }
 .ink { color: var(--ink); }
 .you { color: var(--accent); }
@@ -747,7 +749,20 @@ function edgeCell(r, topE) {
   return `<span class="edge"><s class="was">${sgn(r.base.edge * 100)}%</s><span class="arrow">→</span><b class="${r.edge >= 0.02 ? 'ink' : 'neg'}">${sgn(r.edge * 100)}%</b></span>`;
 }
 
+// After the games: the player's final points, green/red for whether the side shown would have won
+function finalTag(pts, side, line) {
+  if (pts === undefined) return '';
+  if (pts === null) return '<span class="fin other">DNP</span>';
+  const res = pts === line ? 'other' : (side === 'OVER' ? pts > line : pts < line) ? 'win' : 'loss';
+  return `<span class="fin ${res}" title="${res === 'win' ? 'This side won' : res === 'loss' ? 'This side lost' : 'Push'}">${pts} pts</span>`;
+}
+const finalFor = r => finalTag(DATA.finals?.ids?.[r.id] ?? DATA.finals?.names?.[r.player], r.side, r.line);
+
 function decisionCell(r) {
+  return decisionText(r) + finalFor(r);
+}
+
+function decisionText(r) {
   if (r.play === 'bet') return `<span class="dec-bet">Bet ${r.stake}u</span>${r.adj ? ' <span class="small why-sub">your minutes</span>' : ''}`;
   if (r.play === 'out') return `<span class="dec-gone">Out</span> <span class="small why-sub">your call</span>`;
   if (r.play === 'skip') return `<span class="dec-skip">Skip</span> <span class="small why-sub">${esc(skipWhy(r.skip))}</span>`;
@@ -881,7 +896,7 @@ function renderBoardStatic() {
       <td><span class="betcell">${logo(r.book)}${cap(r.side)} ${r.line} <span class="muted">${odds(r.price)}</span></span></td>
       <td class="r pcol">${r.p == null ? '' : pCell(r)}</td>
       <td class="r"><span class="edge">${sgn(r.edge * 100)}%<span class="bar"><i style="width:${Math.max(0, r.edge / top * 100)}%"></i><span class="t" style="left:${0.02 / top * 100}%"></span></span></span></td>
-      <td>${dec}</td></tr>`;
+      <td>${dec}${finalFor(r)}</td></tr>`;
   }).join('');
 }
 

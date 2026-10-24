@@ -4,10 +4,10 @@
   "compatibility_date": "2026-10-12",
   // Static site: the daily pipeline writes data/site (index.html, picks.json, history/) and runs `wrangler deploy`.
   // worker.js runs first on every request (the private-link check), then serves the files.
-  // Secrets (wrangler secret put): VIEW_KEY, the private link's key; GITHUB_TOKEN, for the 12:15 cron.
+  // Secrets (wrangler secret put): VIEW_KEY, the private link's key; GITHUB_TOKEN, for the 9:00 and 12:15 crons.
   "main": "worker.js",
-  // 12:15 PM ET picks run: 16:15 UTC in EDT, 17:15 UTC in EST; worker.js keeps whichever is 12:15 in New York
-  "triggers": { "crons": ["15 16 * * *", "15 17 * * *"] },
+  // Results 9:00 AM ET (13:00 UTC in EDT, 14:00 in EST); picks 12:15 PM ET (16:15 / 17:15). worker.js keeps the right one.
+  "triggers": { "crons": ["0 13 * * *", "0 14 * * *", "15 16 * * *", "15 17 * * *"] },
   "assets": {
     "directory": "data/site",
     "binding": "ASSETS",
