@@ -517,6 +517,13 @@ def notify(msg):
                        capture_output=True)
 
 
+def clear_error(site):
+    """A later run that succeeds takes down an earlier run's failure banner (the picks themselves are unchanged)."""
+    if site.get('status') == 'error':
+        site['status'], site['message'] = 'ok', ''
+    return site
+
+
 def error_banner(paths, mode, err):
     path = paths.site / 'picks.json'
     site = json.loads(path.read_text()) if path.exists() else {'date': str(dt.datetime.now(ET).date())}
@@ -562,12 +569,12 @@ def main():
             print(msg)
             if not msg.startswith('close line'):
                 return                              # nothing new: no rewrite, no upload
-            site = json.loads((paths.site / 'picks.json').read_text())
+            site = clear_error(json.loads((paths.site / 'picks.json').read_text()))
             write_site(paths, site)
         else:
             n = settle(paths, run_results())
             path = paths.site / 'picks.json'
-            site = json.loads(path.read_text()) if path.exists() else {'date': str(stamp.date())}
+            site = clear_error(json.loads(path.read_text())) if path.exists() else {'date': str(stamp.date())}
             write_site(paths, site)
             print(f'settled {n} bet(s)')
         if not args.replay and not args.no_deploy:
