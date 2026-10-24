@@ -1006,20 +1006,26 @@ async function renderHistory() {
 
 const monthName = (m, opts = { month: 'long', year: 'numeric' }) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', opts);
 
-// The panel beside the season chart: best and worst month, longest streaks
+// The panel beside the season chart: best and worst month, longest runs of winning / losing days
 function seasonDetails(L) {
   if (!L.length) return '<tr><td>Fills in once plays settle.</td></tr>';
   const u = bs => bs.reduce((a, b) => a + b.units, 0);
   const byMonth = {};
   L.forEach(b => (byMonth[b.date.slice(0, 7)] ||= []).push(b));
   const months = Object.entries(byMonth).map(([m, bs]) => [m, u(bs)]).sort((a, b) => b[1] - a[1]);
-  const streak = res => { let best = 0, run = 0; L.forEach(b => { run = b.result === res ? run + 1 : 0; best = Math.max(best, run); }); return best; };
+  // Streaks count days, not bets: a day is up or down by its net units (bets on one day have no order).
+  // An exactly even day neither extends nor breaks a streak.
+  const byDay = {};
+  L.forEach(b => (byDay[b.date] = (byDay[b.date] || 0) + b.units));
+  const dayNet = Object.keys(byDay).sort().map(d => byDay[d]).filter(v => Math.abs(v) > 1e-9);
+  const streak = sign => { let best = 0, run = 0; dayNet.forEach(v => { run = Math.sign(v) === sign ? run + 1 : 0; best = Math.max(best, run); }); return best; };
+  const days = n => `${n} day${n === 1 ? '' : 's'}`;
   const mo = ([m, v]) => `${monthName(m, { month: 'short', year: 'numeric' })} · <span class="${cls(v)}">${sgn(v, 1)}u</span>`;
   return [
     ['Best month', mo(months[0])],
     ['Worst month', mo(months[months.length - 1])],
-    ['Longest win streak', streak('win')],
-    ['Longest losing streak', streak('loss')],
+    ['Longest winning streak', days(streak(1))],
+    ['Longest losing streak', days(streak(-1))],
   ].map(([k, v]) => `<tr><td>${k}</td><td class="r">${v}</td></tr>`).join('');
 }
 
