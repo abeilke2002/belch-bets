@@ -1,3 +1,6 @@
 date,player,PLAYER_ID,team,opponent,event_id,commence_time,side,line,price,book,p_side,edge,stake,close_line,close_novig_side,clv,points,result,units
 2026-10-23,Tari Eason,1631106,HOU,SAS,49fc89a9696a9a20b658732b34ce61c4,2026-10-24T01:40:00Z,UNDER,8.5,-112,FanDuel,0.59,0.0617,0.5,,,,12.0,loss,-0.5
 2026-10-24,Khaman Maluach,1642863,PHX,GSW,a71197130d9b661f5b29c812583fe652,2026-10-25T02:10:00Z,UNDER,9.5,-113,DraftKings,0.6007,0.0702,1.0,,,,9.0,win,0.8849557522123894
+2026-10-25,Paul Reed,1630194,DET,PHI,252f3af49fb5271bb040e95e0119f207,2026-10-25T23:40:00Z,UNDER,14.5,-105,DraftKings,0.5739,0.0617,1.0,,,,,,
+2026-10-25,Jared McCain,1642272,OKC,LAC,e6834225d7e218a59333dbbc01fe67ab,2026-10-25T23:10:00Z,UNDER,10.5,-103,DraftKings,0.5312,0.0238,1.0,,,,,,
+2026-10-25,Domantas Sabonis,1627734,SAC,MEM,dcc4a1c7f0427d8e1b2ee7d3f1d48e8a,2026-10-26T01:00:00Z,UNDER,18.5,-111,BetMGM,0.5484,0.0223,1.0,,,,,,
