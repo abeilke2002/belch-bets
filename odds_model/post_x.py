@@ -1,11 +1,13 @@
-"""Post the day's bets to X after the noon picks run (daily_pipeline.py calls post_picks).
+"""Post to X: the day's bets after the noon picks run, last night's results after the 9 AM results run.
 
+daily_pipeline.py calls post_picks (picks mode) and post_results (results mode) once the site is published.
 Needs four GitHub secrets from the X developer app (User authentication, Read and write):
 X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET. Without them nothing is posted.
-One post per day at most (data/live/x_posted.json); no post on days without a bet; no site link (the site is private,
-and a link costs more per post).
+Every bet is reported, wins and losses, with the season record on both posts. Each post goes out once
+(data/live/x_posted.json); nothing on days without a bet; results only once every bet of the night is settled;
+no site link (the site is private, and a link costs more per post).
 
-    python post_x.py --dry-run       # print what today's post would say
+    python post_x.py --dry-run       # print what today's two posts would say
 """
 import base64
 import hashlib
@@ -24,21 +26,58 @@ URL = 'https://api.x.com/2/tweets'
 POSTED = DATA / 'live' / 'x_posted.json'
 KEYS = ['X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_SECRET']
 LIMIT = 280
+SETTLED = ('win', 'loss', 'push', 'void')
+
+side = lambda b: 'O' if b['side'] == 'OVER' else 'U'
+units = lambda v: f"{'+' if v >= 0 else '-'}{abs(v):.1f}u"
+day_label = lambda d: f"{date.fromisoformat(d):%a %b} {date.fromisoformat(d).day}"
 
 
-def text_for(site):
-    """'Belch Bets · Tue Oct 27' then one line per bet, best edge first, trimmed to fit 280 characters."""
-    day = date.fromisoformat(site['date'])
-    head = f"Belch Bets · {day:%a %b} {day.day}"
-    bets = sorted(site.get('picks') or [], key=lambda p: -p['edge'])
-    line = lambda p: f"{p['player']} {'O' if p['side'] == 'OVER' else 'U'} {p['line']:g} ({p['price']:+d} {p['book']})"
-    stake = f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"
-    for k in range(len(bets), 0, -1):
-        more = f'\n+{len(bets) - k} more' if k < len(bets) else ''
-        text = '\n'.join([head, '', *map(line, bets[:k])]) + more + f'\n\n{stake}'
+def record(bets, pct=True):
+    """'14-12 · +1.8u (+5.2%)' over settled bets (pushes and voids count toward units, not the record)."""
+    s = [b for b in bets if b.get('result') in SETTLED]
+    w, l = sum(b['result'] == 'win' for b in s), sum(b['result'] == 'loss' for b in s)
+    u = sum(b['units'] or 0 for b in s)
+    risked = sum(b['stake'] for b in s if b['result'] in ('win', 'loss', 'push'))
+    return f"{w}-{l} · {units(u)}" + (f" ({u / risked:+.1%})" if pct and risked else '')
+
+
+def fit(head, lines, tail):
+    """head, a blank line, as many lines as fit 280 characters ('+N more' for the rest), then tail."""
+    for k in range(len(lines), 0, -1):
+        more = [f'+{len(lines) - k} more'] if k < len(lines) else []
+        text = '\n'.join([head, '', *lines[:k], *more, '', *tail])
         if len(text) <= LIMIT:
             return text
-    return head
+    return '\n'.join([head, '', *tail])[:LIMIT]
+
+
+def picks_text(site):
+    """Today's bets, best edge first, with the stake and the season record so far."""
+    bets = sorted(site.get('picks') or [], key=lambda p: -p['edge'])
+    lines = [f"{p['player']} {side(p)} {p['line']:g} ({p['price']:+d} {p['book']})" for p in bets]
+    ledger = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] < site['date']]
+    tail = [f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"]
+    if any(b.get('result') in SETTLED for b in ledger):
+        tail.append(f"Season: {record(ledger)}")
+    return fit(f"Belch Bets · {day_label(site['date'])}", lines, tail)
+
+
+def night(site):
+    """The page day's bets from the ledger, or [] if none or any is still unsettled."""
+    bets = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] == site['date']]
+    return bets if bets and all(b.get('result') in SETTLED for b in bets) else []
+
+
+def results_text(site):
+    """Every bet from the night with its points and result, the night's total and the season's."""
+    word = {'win': 'W', 'loss': 'L', 'push': 'push', 'void': 'void, DNP'}
+    bets = night(site)
+    lines = [f"{b['player']} {side(b)} {b['line']:g}: " + (f"{b['points']:g} pts, " if b.get('points') is not None else '')
+             + word[b['result']] for b in bets]
+    ledger = [b for b in site['record']['ledger'] if b['date'] <= site['date']]
+    return fit(f"Belch Bets results · {day_label(site['date'])}", lines,
+               [f"Night: {record(bets, pct=False)}", f"Season: {record(ledger)}"])
 
 
 def oauth_header(method, url, keys, params=None):
@@ -55,33 +94,43 @@ def oauth_header(method, url, keys, params=None):
     return 'OAuth ' + ', '.join(f'{q(k)}="{q(v)}"' for k, v in sorted(p.items()))
 
 
-def post_picks(site):
-    """Post today's bets once. Returns a one-line status; never raises (posting must not fail the picks run)."""
+def post_once(key, text):
+    """Post `text` unless `key` was already posted. Returns a one-line status; never raises (posting must not fail a run)."""
     try:
-        if not site.get('picks'):
-            return 'X: no bets today, nothing posted'
         keys = {k: os.environ.get(k) for k in KEYS}
         if not all(keys.values()):
             return 'X: keys not set, nothing posted'
         done = json.loads(POSTED.read_text()) if POSTED.exists() else {}
-        if site['date'] in done:
-            return f"X: already posted for {site['date']}"
+        if key in done:
+            return f'X: already posted {key}'
         import requests
-        r = requests.post(URL, json={'text': text_for(site)}, timeout=30,
-                          headers={'Authorization': oauth_header('POST', URL, keys)})
+        r = requests.post(URL, json={'text': text}, timeout=30, headers={'Authorization': oauth_header('POST', URL, keys)})
         if r.status_code != 201:
             return f'X: post failed ({r.status_code}): {r.text[:200]}'
-        done[site['date']] = r.json()['data']['id']
+        done[key] = r.json()['data']['id']
         POSTED.parent.mkdir(exist_ok=True)
         POSTED.write_text(json.dumps(done, indent=1))
-        return f"X: posted {done[site['date']]}"
+        return f'X: posted {key} ({done[key]})'
     except Exception as e:
         return f'X: post failed ({type(e).__name__}: {e})'
+
+
+def post_picks(site):
+    if not site.get('picks'):
+        return 'X: no bets today, nothing posted'
+    return post_once(site['date'], picks_text(site))          # key stays the bare date (posts made before results existed)
+
+
+def post_results(site):
+    if not night(site):
+        return 'X: no settled bets for that night, nothing posted'
+    return post_once('results:' + site['date'], results_text(site))
 
 
 if __name__ == '__main__':
     site = json.loads((DATA / 'site' / 'picks.json').read_text())
     if '--dry-run' in sys.argv:
-        print(text_for(site) if site.get('picks') else 'no bets today')
+        print(picks_text(site) if site.get('picks') else 'picks: no bets today', '\n---')
+        print(results_text(site) if night(site) else 'results: nothing settled for that night')
     else:
         print(post_picks(site))
