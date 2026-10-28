@@ -14,6 +14,7 @@ no site link (the site is private, and a link costs more per post).
 
     python post_x.py --dry-run       # print what today's two posts would say
     ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
+    python post_x.py --connect       # on your computer: approve posting in X, saves the X_REFRESH_TOKEN secret
 """
 import base64
 import hashlib
@@ -151,6 +152,34 @@ def authorize(code, verifier):
     return tok.get('scope', '')
 
 
+def connect(repo='abeilke2002/belch-bets', client_id='Ri1IdEtoWXFPckxteEFkR1RrRUQ6MTpjaQ'):
+    """Run on your own computer: approve posting for @NoonLineNBA in the browser, and the new refresh token goes
+    straight into the X_REFRESH_TOKEN GitHub secret. X's codes last ~30 seconds, too short for a cloud run."""
+    import getpass, subprocess, webbrowser, requests
+    secret = getpass.getpass('X Client Secret (from the app\'s Keys and tokens page; hidden as you paste): ').strip()
+    verifier = secrets.token_urlsafe(48)
+    link = ('https://x.com/i/oauth2/authorize?' + urllib.parse.urlencode({
+        'response_type': 'code', 'client_id': client_id, 'redirect_uri': REDIRECT, 'state': 'noonline',
+        'scope': 'tweet.read tweet.write users.read offline.access', 'code_challenge': verifier,
+        'code_challenge_method': 'plain'}, quote_via=urllib.parse.quote))
+    print('\nOpening X. Click "Authorize app", then paste the address you land on here, right away.\n' + link + '\n')
+    webbrowser.open(link)
+    landed = input('Address you landed on: ').strip()
+    code = urllib.parse.parse_qs(urllib.parse.urlparse(landed).query).get('code', [''])[0]
+    r = requests.post(TOKEN_URL, auth=(client_id, secret), timeout=30, data={
+        'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT, 'code_verifier': verifier,
+        'client_id': client_id})
+    if r.status_code != 200:
+        print(f"Failed ({r.status_code}): {' '.join(r.text.split())[:300]}. Run it again and paste faster.")
+        return
+    tok = r.json()
+    if 'tweet.write' not in tok.get('scope', ''):
+        print('Approved, but without posting permission (scopes: ' + tok.get('scope', '') + '). Nothing saved.')
+        return
+    subprocess.run(['gh', 'secret', 'set', 'X_REFRESH_TOKEN', '-R', repo], input=tok['refresh_token'], text=True, check=True)
+    print('Done: X_REFRESH_TOKEN updated with a token that can post (' + tok['scope'] + ').')
+
+
 def auth_header():
     """Authorization for POST /2/tweets: OAuth 2.0 if its four secrets are set, else OAuth 1.0a, else None."""
     if all(os.environ.get(k) for k in OAUTH2):
@@ -194,7 +223,9 @@ def post_results(site):
 
 if __name__ == '__main__':
     site = json.loads((DATA / 'site' / 'picks.json').read_text())
-    if '--authorize' in sys.argv:                         # workflow 'xauth' mode: $ANNOUNCE = "<code> <verifier>"
+    if '--connect' in sys.argv:                           # on your own computer: authorize and store the token
+        connect()
+    elif '--authorize' in sys.argv:                         # workflow 'xauth' mode: $ANNOUNCE = "<code> <verifier>"
         code, verifier = os.environ.get('ANNOUNCE', '').split()
         print('X: authorized, token scopes:', authorize(code, verifier))
     elif '--announce' in sys.argv:                          # one-off post (workflow 'announce' mode), text from $ANNOUNCE
