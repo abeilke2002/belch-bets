@@ -35,6 +35,7 @@ KEYS = ['X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_SECRET']       
 OAUTH2 = ['X_CLIENT_ID', 'X_CLIENT_SECRET', 'X_REFRESH_TOKEN', 'X_TOKEN_KEY']            # OAuth 2.0
 TOKEN_URL = 'https://api.x.com/2/oauth2/token'
 TOKEN_FILE = DATA / 'live' / 'x_token.enc'
+SCOPES = None                                               # the OAuth 2.0 token's scopes, for error messages
 LIMIT = 280
 SETTLED = ('win', 'loss', 'push', 'void')
 
@@ -123,6 +124,8 @@ def oauth2_bearer():
     if r.status_code != 200:
         raise RuntimeError(f'token refresh failed ({r.status_code}): {r.text[:200]}')
     tok = r.json()
+    global SCOPES
+    SCOPES = tok.get('scope', '')                       # e.g. 'tweet.write users.read tweet.read offline.access'
     TOKEN_FILE.parent.mkdir(exist_ok=True)
     TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
     return tok['access_token']
@@ -147,7 +150,8 @@ def post_once(key, text):
         import requests
         r = requests.post(URL, json={'text': text}, timeout=30, headers={'Authorization': auth_header()})
         if r.status_code != 201:
-            return f'X: post failed ({r.status_code}): {r.text[:200]}'
+            scope = f' [token scopes: {SCOPES}]' if SCOPES is not None else ''
+            return f"X: post failed ({r.status_code}): {' '.join(r.text.split())[:300]}{scope}"
         done[key] = r.json()['data']['id']
         POSTED.parent.mkdir(exist_ok=True)
         POSTED.write_text(json.dumps(done, indent=1))
