@@ -689,6 +689,9 @@ def main():
             print(f'settled {n} bet(s); final points on {k} day(s) of edge boards')
         if not args.replay and not args.no_deploy:
             print(deploy(paths))
+            if args.mode == 'picks':
+                from post_x import post_picks
+                print(post_picks(site))                 # once a day, after the site is live; never fails the run
     except Exception as e:
         traceback.print_exc()
         error_banner(paths, args.mode, f'{type(e).__name__}: {e}')
