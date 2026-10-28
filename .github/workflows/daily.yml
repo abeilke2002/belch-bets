@@ -13,11 +13,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: picks, close, results, or announce (post the text in args to X)
+        description: picks, close, results, announce (post the text in args to X) or xauth (args = code verifier)
         required: true
         default: picks
         type: choice
-        options: [picks, close, results, announce]
+        options: [picks, close, results, announce, xauth]
       args:
         description: extra arguments for testing, e.g. --replay --date 2026-03-30 --no-deploy
         required: false
@@ -72,13 +72,14 @@ jobs:
         with: { node-version: '20' }
       - run: pip install -q -r ../requirements.txt
       - name: Build features from the box scores
-        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce'
+        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce' && steps.mode.outputs.mode != 'xauth'
         run: python build_features.py > /dev/null
       - name: Run the pipeline
         env:
           ANNOUNCE: ${{ inputs.args }}            # announce mode: the post's text (read by post_x.py, never put on a command line)
         run: |
           if [ "${{ steps.mode.outputs.mode }}" = announce ]; then python post_x.py --announce
+          elif [ "${{ steps.mode.outputs.mode }}" = xauth ]; then python post_x.py --authorize
           elif [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20 ${{ inputs.args }}
           else python daily_pipeline.py ${{ steps.mode.outputs.mode }} ${{ inputs.args }}; fi
       - name: Save the day's data

@@ -131,6 +131,26 @@ def oauth2_bearer():
     return tok['access_token']
 
 
+REDIRECT = 'https://x.com/NoonLineNBA'                     # the app's callback URI (must match it exactly)
+
+
+def authorize(code, verifier):
+    """Swap an authorization code (from the consent link, PKCE 'plain') for tokens that can post, and save the refresh
+    token so the next post uses it (seeded to the current X_REFRESH_TOKEN secret). Returns the granted scopes."""
+    import requests
+    cid = os.environ['X_CLIENT_ID']
+    r = requests.post(TOKEN_URL, data={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT,
+                                       'code_verifier': verifier, 'client_id': cid},
+                      auth=(cid, os.environ['X_CLIENT_SECRET']), timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(f"code exchange failed ({r.status_code}): {' '.join(r.text.split())[:300]}")
+    tok = r.json()
+    seed = hashlib.sha256(os.environ['X_REFRESH_TOKEN'].encode()).hexdigest()[:16]
+    TOKEN_FILE.parent.mkdir(exist_ok=True)
+    TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
+    return tok.get('scope', '')
+
+
 def auth_header():
     """Authorization for POST /2/tweets: OAuth 2.0 if its four secrets are set, else OAuth 1.0a, else None."""
     if all(os.environ.get(k) for k in OAUTH2):
@@ -174,7 +194,10 @@ def post_results(site):
 
 if __name__ == '__main__':
     site = json.loads((DATA / 'site' / 'picks.json').read_text())
-    if '--announce' in sys.argv:                          # one-off post (workflow 'announce' mode), text from $ANNOUNCE
+    if '--authorize' in sys.argv:                         # workflow 'xauth' mode: $ANNOUNCE = "<code> <verifier>"
+        code, verifier = os.environ.get('ANNOUNCE', '').split()
+        print('X: authorized, token scopes:', authorize(code, verifier))
+    elif '--announce' in sys.argv:                          # one-off post (workflow 'announce' mode), text from $ANNOUNCE
         text = os.environ.get('ANNOUNCE', '').strip()
         print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
     elif '--dry-run' in sys.argv:
