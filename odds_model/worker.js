@@ -12,7 +12,7 @@ const hasCookie = (request, key) =>
   (request.headers.get('cookie') || '').split(';').some(c => c.trim() === `${COOKIE}=${key}`);
 
 const PRIVATE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex"><title>Belch Bets</title><style>body{background:#0b0d10;color:#b9bfc8;font:15px/1.5 -apple-system,Helvetica,Arial,sans-serif;
+<meta name="robots" content="noindex"><title>The Noon Line</title><style>body{background:#0b0d10;color:#b9bfc8;font:15px/1.5 -apple-system,Helvetica,Arial,sans-serif;
 display:grid;place-items:center;min-height:100vh;margin:0;padding:0 16px;text-align:center}b{color:#eceef1}</style></head>
 <body><p><b>This site is private.</b><br>Open it with the link you were sent.</p></body></html>`;
 

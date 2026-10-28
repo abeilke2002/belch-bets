@@ -60,7 +60,7 @@ def picks_text(site):
     tail = [f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"]
     if any(b.get('result') in SETTLED for b in ledger):
         tail.append(f"Season: {record(ledger)}")
-    return fit(f"Belch Bets · {day_label(site['date'])}", lines, tail)
+    return fit(f"The Noon Line · {day_label(site['date'])}", lines, tail)
 
 
 def night(site):
@@ -76,7 +76,7 @@ def results_text(site):
     lines = [f"{b['player']} {side(b)} {b['line']:g}: " + (f"{b['points']:g} pts, " if b.get('points') is not None else '')
              + word[b['result']] for b in bets]
     ledger = [b for b in site['record']['ledger'] if b['date'] <= site['date']]
-    return fit(f"Belch Bets results · {day_label(site['date'])}", lines,
+    return fit(f"The Noon Line results · {day_label(site['date'])}", lines,
                [f"Night: {record(bets, pct=False)}", f"Season: {record(ledger)}"])
 
 

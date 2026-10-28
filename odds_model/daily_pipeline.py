@@ -621,7 +621,7 @@ def deploy(paths):
 def notify(msg):
     """Mac desktop notification when run locally; a no-op in the cloud run (no osascript on Linux)."""
     if shutil.which('osascript'):
-        subprocess.run(['osascript', '-e', f'display notification "{msg[:200]}" with title "Belch Bets"'],
+        subprocess.run(['osascript', '-e', f'display notification "{msg[:200]}" with title "The Noon Line"'],
                        capture_output=True)
 
 
