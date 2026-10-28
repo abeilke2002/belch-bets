@@ -1,8 +1,13 @@
 """Post to X: the day's bets after the noon picks run, last night's results after the 9 AM results run.
 
 daily_pipeline.py calls post_picks (picks mode) and post_results (results mode) once the site is published.
-Needs four GitHub secrets from the X developer app (User authentication, Read and write):
-X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET. Without them nothing is posted.
+Credentials (GitHub secrets), either kind; without them nothing is posted:
+  OAuth 2.0 (what X's developer console issues now): X_CLIENT_ID, X_CLIENT_SECRET, X_REFRESH_TOKEN (the refresh token
+    from "Generate" on the app's Access Token, Read and write) and X_TOKEN_KEY (any long random string). X access
+    tokens last 2 hours and every refresh token works once, so each post refreshes and keeps the new refresh token
+    encrypted with X_TOKEN_KEY in data/live/x_token.enc (committed by the run like the rest of data/live). Setting a
+    new X_REFRESH_TOKEN secret (re-authorising) takes precedence over the saved one.
+  OAuth 1.0a: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET.
 Every bet is reported, wins and losses, with the season record on both posts. Each post goes out once
 (data/live/x_posted.json); nothing on days without a bet; results only once every bet of the night is settled;
 no site link (the site is private, and a link costs more per post).
@@ -15,6 +20,7 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -24,7 +30,10 @@ from config import DATA
 
 URL = 'https://api.x.com/2/tweets'
 POSTED = DATA / 'live' / 'x_posted.json'
-KEYS = ['X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_SECRET']
+KEYS = ['X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_SECRET']                # OAuth 1.0a
+OAUTH2 = ['X_CLIENT_ID', 'X_CLIENT_SECRET', 'X_REFRESH_TOKEN', 'X_TOKEN_KEY']            # OAuth 2.0
+TOKEN_URL = 'https://api.x.com/2/oauth2/token'
+TOKEN_FILE = DATA / 'live' / 'x_token.enc'
 LIMIT = 280
 SETTLED = ('win', 'loss', 'push', 'void')
 
@@ -94,17 +103,48 @@ def oauth_header(method, url, keys, params=None):
     return 'OAuth ' + ', '.join(f'{q(k)}="{q(v)}"' for k, v in sorted(p.items()))
 
 
+def _crypt(text, decrypt=False):
+    """AES-256 with the X_TOKEN_KEY secret (openssl), base64 on one line."""
+    return subprocess.run(['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-salt', '-a', '-A', *(['-d'] if decrypt else []),
+                           '-pass', 'env:X_TOKEN_KEY'], input=text, capture_output=True, text=True, check=True).stdout
+
+
+def oauth2_bearer():
+    """A fresh OAuth 2.0 access token. Uses the saved refresh token unless the X_REFRESH_TOKEN secret has changed since
+    it was saved, then stores the new (rotated) refresh token before returning."""
+    import requests
+    seed = hashlib.sha256(os.environ['X_REFRESH_TOKEN'].encode()).hexdigest()[:16]
+    saved = json.loads(_crypt(TOKEN_FILE.read_text(), decrypt=True)) if TOKEN_FILE.exists() else {}
+    refresh = saved['refresh'] if saved.get('seed') == seed else os.environ['X_REFRESH_TOKEN']
+    cid = os.environ['X_CLIENT_ID']
+    r = requests.post(TOKEN_URL, data={'grant_type': 'refresh_token', 'refresh_token': refresh, 'client_id': cid},
+                      auth=(cid, os.environ['X_CLIENT_SECRET']), timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(f'token refresh failed ({r.status_code}): {r.text[:200]}')
+    tok = r.json()
+    TOKEN_FILE.parent.mkdir(exist_ok=True)
+    TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
+    return tok['access_token']
+
+
+def auth_header():
+    """Authorization for POST /2/tweets: OAuth 2.0 if its four secrets are set, else OAuth 1.0a, else None."""
+    if all(os.environ.get(k) for k in OAUTH2):
+        return 'Bearer ' + oauth2_bearer()
+    keys = {k: os.environ.get(k) for k in KEYS}
+    return oauth_header('POST', URL, keys) if all(keys.values()) else None
+
+
 def post_once(key, text):
     """Post `text` unless `key` was already posted. Returns a one-line status; never raises (posting must not fail a run)."""
     try:
-        keys = {k: os.environ.get(k) for k in KEYS}
-        if not all(keys.values()):
+        if not (all(os.environ.get(k) for k in OAUTH2) or all(os.environ.get(k) for k in KEYS)):
             return 'X: keys not set, nothing posted'
         done = json.loads(POSTED.read_text()) if POSTED.exists() else {}
         if key in done:
             return f'X: already posted {key}'
         import requests
-        r = requests.post(URL, json={'text': text}, timeout=30, headers={'Authorization': oauth_header('POST', URL, keys)})
+        r = requests.post(URL, json={'text': text}, timeout=30, headers={'Authorization': auth_header()})
         if r.status_code != 201:
             return f'X: post failed ({r.status_code}): {r.text[:200]}'
         done[key] = r.json()['data']['id']

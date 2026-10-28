@@ -45,6 +45,10 @@ jobs:
       X_API_SECRET: ${{ secrets.X_API_SECRET }}
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
       X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}         # or OAuth 2.0 (what X's console issues now); see post_x.py
+      X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
+      X_REFRESH_TOKEN: ${{ secrets.X_REFRESH_TOKEN }}
+      X_TOKEN_KEY: ${{ secrets.X_TOKEN_KEY }}
       TZ: America/New_York
     steps:
       - name: Which job
