@@ -13,6 +13,7 @@ Every bet is reported, wins and losses, with the season record on both posts. Ea
 no site link (the site is private, and a link costs more per post).
 
     python post_x.py --dry-run       # print what today's two posts would say
+    ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
 """
 import base64
 import hashlib
@@ -169,7 +170,10 @@ def post_results(site):
 
 if __name__ == '__main__':
     site = json.loads((DATA / 'site' / 'picks.json').read_text())
-    if '--dry-run' in sys.argv:
+    if '--announce' in sys.argv:                          # one-off post (workflow 'announce' mode), text from $ANNOUNCE
+        text = os.environ.get('ANNOUNCE', '').strip()
+        print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
+    elif '--dry-run' in sys.argv:
         print(picks_text(site) if site.get('picks') else 'picks: no bets today', '\n---')
         print(results_text(site) if night(site) else 'results: nothing settled for that night')
     else:

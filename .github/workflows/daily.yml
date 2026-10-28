@@ -13,11 +13,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: picks, close or results
+        description: picks, close, results, or announce (post the text in args to X)
         required: true
         default: picks
         type: choice
-        options: [picks, close, results]
+        options: [picks, close, results, announce]
       args:
         description: extra arguments for testing, e.g. --replay --date 2026-03-30 --no-deploy
         required: false
@@ -72,11 +72,14 @@ jobs:
         with: { node-version: '20' }
       - run: pip install -q -r ../requirements.txt
       - name: Build features from the box scores
-        if: steps.mode.outputs.mode != 'close'
+        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce'
         run: python build_features.py > /dev/null
       - name: Run the pipeline
+        env:
+          ANNOUNCE: ${{ inputs.args }}            # announce mode: the post's text (read by post_x.py, never put on a command line)
         run: |
-          if [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20 ${{ inputs.args }}
+          if [ "${{ steps.mode.outputs.mode }}" = announce ]; then python post_x.py --announce
+          elif [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20 ${{ inputs.args }}
           else python daily_pipeline.py ${{ steps.mode.outputs.mode }} ${{ inputs.args }}; fi
       - name: Save the day's data
         if: always()
