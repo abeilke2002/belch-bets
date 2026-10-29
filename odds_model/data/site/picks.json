@@ -1,8 +1,8 @@
 {
  "date": "2026-10-29",
  "updated": "2026-10-29 12:01 PM ET",
- "status": "error",
- "message": "The results update failed at 01:29 PM ET: RuntimeError: pull_box_scores_espn.py failed: skipped (retried next run): 2026-10-26 scoreboard: JSONDecodeError: Expecting value: line 1 column 1 (char 0) skipped (retried next run): 2026-10-27 scoreboard: JSONDecodeError: Expecting value: line 1 column 1 (char 0) ESPN box scores: nothing downloaded; 2 failure(s), first: 2026-10-26 scoreboard: JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+ "status": "ok",
+ "message": "",
  "picks": [],
  "board": [
   {
