@@ -44,7 +44,7 @@ def get(url, **params):
             r = requests.get(url, params=params, timeout=30)
             r.raise_for_status()
             return r.json()
-        except requests.RequestException:
+        except (requests.RequestException, ValueError):        # ValueError: an empty or non-JSON reply
             if attempt == 3:
                 raise
             time.sleep(3 * (attempt + 1))
@@ -225,8 +225,10 @@ def main():
           f'{len(match.new)} ({len(unmatched)} not in past rosters: {[u["name"] for u in unmatched][:8]})')
     for f in failed:
         print('skipped (retried next run):', f, file=sys.stderr)
-    if failed and not new_box:
-        sys.exit(f'ESPN box scores: nothing downloaded; {len(failed)} failure(s), first: {failed[0]}')
+    # Fail only if last night's own download failed: a hiccup re-checking days already saved is harmless
+    last_night = [f for f in failed if f.startswith(str(today - dt.timedelta(days=1)))]
+    if last_night and not args.dates:
+        sys.exit(f'ESPN box scores: last night not fully downloaded ({len(last_night)} failure(s), first: {last_night[0]})')
 
 
 if __name__ == '__main__':
