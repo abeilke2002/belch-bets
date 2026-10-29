@@ -182,7 +182,8 @@ section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
             games played, whether he's just back from an absence, and how many shots his missing teammates usually take.</p></div>
         <div class="card"><h3>Points</h3>
           <p class="muted">Uses the predicted minutes plus season and recent scoring, shot and free-throw volume, last
-            season's average, starter role, rest, the opponent's defense against his position, and who is out.</p></div>
+            season's average, starter role, rest, the opponent's defense against his position, who is out, and how many
+            players are left at his position to absorb the missing minutes.</p></div>
       </div>
       <p><b>Injuries matter most.</b> At noon the model reads the NBA's official injury report. Players listed Out or
         Doubtful count as missing; Questionable players count as half missing, because they end up playing about half the
@@ -281,20 +282,20 @@ edge = P(side) − break-even(best price)</div>
         <table>
           <thead><tr><th>Season</th><th class="r">Bets</th><th class="r">Win rate</th><th class="r">Units</th></tr></thead>
           <tbody>
-            <tr><td>2023-24*</td><td class="r">236</td><td class="r">55.2%</td><td class="r pos">+22.4</td></tr>
-            <tr><td>2024-25</td><td class="r">564</td><td class="r">55.9%</td><td class="r pos">+40.9</td></tr>
-            <tr><td>2025-26</td><td class="r">307</td><td class="r">54.4%</td><td class="r pos">+13.8</td></tr>
-            <tr class="total"><td>2024-26</td><td class="r">871</td><td class="r">55.4%</td><td class="r pos">+54.7</td></tr>
+            <tr><td>2023-24*</td><td class="r">230</td><td class="r">55.9%</td><td class="r pos">+26.1</td></tr>
+            <tr><td>2024-25</td><td class="r">643</td><td class="r">56.0%</td><td class="r pos">+46.1</td></tr>
+            <tr><td>2025-26</td><td class="r">296</td><td class="r">55.0%</td><td class="r pos">+16.4</td></tr>
+            <tr class="total"><td>2024-26</td><td class="r">939</td><td class="r">55.7%</td><td class="r pos">+62.5</td></tr>
           </tbody>
         </table>
       </div>
       <p>*2023-24 is the oldest season with sportsbook lines, so its over/under model could only be trained on the two
         later seasons. It's shown for reference and left out of the total.</p>
-      <p>Over 2024-26 that's about +6.3% per bet, against a break-even win rate of about 52%. The statistical range runs
-        from roughly 0% to +12%. Because two of the rules came from these same seasons, expect the live result to land
+      <p>Over 2024-26 that's about +6.7% per bet, against a break-even win rate of about 52%. The statistical range runs
+        from roughly +1% to +12%. Because two of the rules came from these same seasons, expect the live result to land
         lower; treat it as promising, not proven. Expect cold spells: the worst losing stretch averaged about 13 units.</p>
-      <p>The strongest evidence isn't the profit. Between noon and tip-off, the market moved toward the model's side about 60%
-        of the time and away from it 40%, in every season and every retraining. That is very unlikely to be luck, and it means
+      <p>The strongest evidence isn't the profit. Between noon and tip-off, the market moved toward the model's side about 61%
+        of the time and away from it 39%, in every season and every retraining. That is very unlikely to be luck, and it means
         the projections spot prices the market later corrects. Whether that edge is big enough to beat the books' margin is
         what this season will show. One caution: the model running live was refit on all three seasons and leans on the
         projection about half as much as these backtest models did, so expect fewer bets than the backtest shows.</p>

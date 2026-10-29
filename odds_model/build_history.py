@@ -7,7 +7,7 @@ Out-of-sample backtest of the site's rule: every prop not on the injury report o
 team in its first 3 games after a player left it midseason (daily_pipeline.left_behind). Projections ('half' injury policy, damping) and the classifier (market
 fixed + recent-weighted) are both trained only on earlier seasons. 2023-24 is left out: it has no earlier lines,
 so its classifier would have to be trained on later seasons. The live season comes from picks.json.
-SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robustness run, 2026-10-23); the History
+SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robustness run, 2026-10-29, position-absence model); the History
 tab shows seed 0, the production setting, and quotes the 10-seed average and range next to it.
 """
 import json
@@ -17,7 +17,7 @@ import pandas as pd
 
 import calibration_test as ct
 import q_policy_test as qp
-from build_features import add_redistribution
+from build_features import add_redistribution, finish_position, load_positions, position_absences
 from config import DATA, ROOT
 from damping import damp, fit_damping, predict_pair
 from noon_backtest import season_averages
@@ -32,7 +32,7 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
 PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
 MIN_EDGE, STAKE = 0.02, 1.0
-SPREAD = {'2025-26': (4.5, 0.6, 7.2, 13.8), '2024-25': (7.3, 6.0, 8.6, 40.9)}     # 10-seed avg/min/max %/bet, avg units
+SPREAD = {'2025-26': (5.6, 3.4, 9.0, 16.4), '2024-25': (7.2, 3.4, 8.9, 46.1)}     # 10-seed avg/min/max %/bet, avg units
 abbr = lambda full: next((a for nick, a in TEAM_ABBR.items() if str(full).endswith(nick)), str(full))
 
 
@@ -40,11 +40,22 @@ def projections():
     """Noon projections for every line season, each trained only on earlier seasons (as q_policy_test.py)."""
     g = pd.read_parquet(DATA / 'player_games.parquet'); played = g[g['played']].copy()
     rep = pd.read_parquet(DATA / 'noon_injuries.parquet')
+    half, avgs = qp.absence_lists(g, played, rep)['half'], season_averages(played)
     x = load_rows().drop(columns=['out_ppg', 'out_min', 'out_fga', 'n_out']).merge(
-        qp.weighted_totals(qp.absence_lists(g, played, rep)['half'], season_averages(played)), on=['GAME_ID', 'TEAM_ID'], how='left')
+        qp.weighted_totals(half, avgs), on=['GAME_ID', 'TEAM_ID'], how='left')
     x[['out_ppg', 'out_min', 'out_fga', 'n_out']] = x[['out_ppg', 'out_min', 'out_fga', 'n_out']].fillna(0)
     x['out_fga_share'] = x['out_fga'] / x['team_fga_pg']
     x = add_redistribution(x)
+    # Position absences as known at noon too (player_games has them from who actually sat): the team's listed players,
+    # weighted by the same noon absence list (Out/Doubtful 1, Questionable 0.5), plus listed absentees not in the box
+    w = half.groupby(['GAME_ID', 'PLAYER_ID'])['weight'].max()
+    rost = g[['PLAYER_ID', 'GAME_ID', 'TEAM_ID', 'season', 'GAME_DATE']]
+    rost = pd.concat([rost, half[['PLAYER_ID', 'GAME_ID', 'TEAM_ID', 'season', 'GAME_DATE']]]).drop_duplicates(['PLAYER_ID', 'GAME_ID'])
+    rost = rost.assign(w=rost.set_index(['GAME_ID', 'PLAYER_ID']).index.map(w).fillna(0).values)
+    rost = pd.merge_asof(rost.sort_values('GAME_DATE'), avgs[['PLAYER_ID', 'season', 'GAME_DATE', 'mpg']].sort_values('GAME_DATE'),
+                         on='GAME_DATE', by=['PLAYER_ID', 'season'], allow_exact_matches=False).merge(load_positions(), on='PLAYER_ID', how='left')
+    x = x.drop(columns=['out_min_pos', 'n_active_pos', 'n_rot_pos', 'pos_vacancy', 'pos_code'], errors='ignore')
+    x = finish_position(x.merge(position_absences(rost), on=['GAME_ID', 'TEAM_ID', 'pos'], how='left'))
     mf, pf, out = selected('minutes'), selected('points'), []
     for s in ['2023-24', '2024-25', '2025-26']:      # 2023-24 projections are the 2024-25 classifier's training rows
         tr = x[x.season < s].copy()
