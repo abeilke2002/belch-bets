@@ -26,7 +26,8 @@ import subprocess
 import sys
 import time
 import urllib.parse
-from datetime import date
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from config import DATA
 
@@ -64,21 +65,69 @@ def fit(head, lines, tail):
     return '\n'.join([head, '', *tail])[:LIMIT]
 
 
-def picks_text(site):
-    """Today's bets, best edge first, with the stake and the season record so far."""
+BOOK = {'DraftKings': 'DK', 'FanDuel': 'FD', 'BetMGM': 'MGM', 'Caesars': 'CZR'}
+TAGS_PICKS = '#NBA #NBAPicks #PlayerProps'                  # two or three tags, on the first post of a thread only
+TAGS_RESULTS = '#NBA #NBABets'
+
+
+def pick_block(p):
+    """'Kobe Sanders U 12.5 (-108 DK)' and the reason: projection, chance to hit, season average."""
+    why = f"Model {p['proj']:.1f} pts · {p['p']:.0%} to hit"
+    if p.get('season') is not None:
+        why += f" · avg {p['season']:.1f}"
+    return f"{p['player']} {side(p)} {p['line']:g} ({p['price']:+d} {BOOK.get(p['book'], p['book'])})\n{why}"
+
+
+def picks_posts(site):
+    """Today's bets, best edge first, each with its reason. The first post carries the date, stake and season record;
+    bets that don't fit continue in replies (a thread)."""
     bets = sorted(site.get('picks') or [], key=lambda p: -p['edge'])
-    lines = [f"{p['player']} {side(p)} {p['line']:g} ({p['price']:+d} {p['book']})" for p in bets]
     ledger = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] < site['date']]
-    tail = [f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"]
-    if any(b.get('result') in SETTLED for b in ledger):
-        tail.append(f"Season: {record(ledger)}")
-    return fit(f"The Noon Line · {day_label(site['date'])}", lines, tail)
+    stake = f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"
+    tail = stake + (f" · Season {record(ledger, pct=False)}" if any(b.get('result') in SETTLED for b in ledger) else '')
+    tail += '\n' + TAGS_PICKS
+    head = f"The Noon Line · {day_label(site['date'])}"
+    blocks, posts = [pick_block(p) for p in bets], []
+    cur = [head]
+    for blk in blocks:
+        trial = '\n\n'.join(cur + [blk] + ([tail] if not posts else []))
+        if len(trial) <= LIMIT or len(cur) == (1 if not posts else 0):
+            cur.append(blk)
+        else:
+            posts.append('\n\n'.join(cur + ([tail] if not posts else [])))
+            cur = [blk]                                  # this bet starts the next post
+    posts.append('\n\n'.join(cur + ([tail] if not posts else [])))
+    if len(posts) > 1:
+        posts = [t + f"\n({i + 1}/{len(posts)})" if len(t) + 6 <= LIMIT else t for i, t in enumerate(posts)]
+    return posts
+
+
+def picks_text(site):
+    return '\n\n---\n\n'.join(picks_posts(site))             # for --dry-run
 
 
 def night(site):
     """The page day's bets from the ledger, or [] if none or any is still unsettled."""
     bets = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] == site['date']]
     return bets if bets and all(b.get('result') in SETTLED for b in bets) else []
+
+
+def week_text(ledger, monday):
+    """The Monday scorecard for the 7 days before `monday`: record and units, season, line movement."""
+    start = (date.fromisoformat(monday) - timedelta(days=7)).isoformat()
+    week = [b for b in ledger if start <= b['date'] < monday and b.get('result') in SETTLED]
+    season = [b for b in ledger if b['date'] < monday]
+    s, e = date.fromisoformat(start), date.fromisoformat(monday) - timedelta(days=1)
+    span = f"{s:%b} {s.day}-{e.day}" if s.month == e.month else f"{s:%b} {s.day}-{e:%b} {e.day}"
+    lines = [f"Week of {span}: {record(week)}", f"Season: {record(season)}"]
+    moved = [b for b in season if b.get('clv') is not None and b['clv'] != 0]
+    if moved:
+        ours = sum(b['clv'] > 0 for b in moved)
+        lines.append(f"Line moved our way after the pick: {ours} of {len(moved)} ({ours / len(moved):.0%})")
+    best = max(week, key=lambda b: b['units'] or 0)
+    if (best['units'] or 0) > 0:
+        lines.append(f"Best hit: {best['player']} {side(best)} {best['line']:g} ({best['points']:g} pts)")
+    return '\n'.join(['The Noon Line · weekly scorecard', ''] + lines + ['', 'Every bet counted, wins and losses.', TAGS_RESULTS])[:LIMIT]
 
 
 def results_text(site):
@@ -89,7 +138,7 @@ def results_text(site):
              + word[b['result']] for b in bets]
     ledger = [b for b in site['record']['ledger'] if b['date'] <= site['date']]
     return fit(f"The Noon Line results · {day_label(site['date'])}", lines,
-               [f"Night: {record(bets, pct=False)}", f"Season: {record(ledger)}"])
+               [f"Night: {record(bets, pct=False)}", f"Season: {record(ledger)}", '', TAGS_RESULTS])
 
 
 def oauth_header(method, url, keys, params=None):
@@ -189,7 +238,8 @@ def auth_header():
 
 
 def post_once(key, text):
-    """Post `text` unless `key` was already posted. Returns a one-line status; never raises (posting must not fail a run)."""
+    """Post `text` (or a list of posts, as a thread) unless `key` was already posted. Returns a one-line status; never
+    raises (posting must not fail a run)."""
     try:
         if not (all(os.environ.get(k) for k in OAUTH2) or all(os.environ.get(k) for k in KEYS)):
             return 'X: keys not set, nothing posted'
@@ -197,11 +247,19 @@ def post_once(key, text):
         if key in done:
             return f'X: already posted {key}'
         import requests
-        r = requests.post(URL, json={'text': text}, timeout=30, headers={'Authorization': auth_header()})
-        if r.status_code != 201:
-            scope = f' [token scopes: {SCOPES}]' if SCOPES is not None else ''
-            return f"X: post failed ({r.status_code}): {' '.join(r.text.split())[:300]}{scope}"
-        done[key] = r.json()['data']['id']
+        auth, first, prev = auth_header(), None, None
+        for t in ([text] if isinstance(text, str) else text):
+            body = {'text': t, **({'reply': {'in_reply_to_tweet_id': prev}} if prev else {})}
+            r = requests.post(URL, json=body, timeout=30, headers={'Authorization': auth})
+            if r.status_code != 201:
+                scope = f' [token scopes: {SCOPES}]' if SCOPES is not None else ''
+                if first:                                # part of the thread is up: record it so it isn't reposted
+                    done[key] = first
+                    POSTED.write_text(json.dumps(done, indent=1))
+                return f"X: post failed ({r.status_code}): {' '.join(r.text.split())[:300]}{scope}"
+            prev = r.json()['data']['id']
+            first = first or prev
+        done[key] = first
         POSTED.parent.mkdir(exist_ok=True)
         POSTED.write_text(json.dumps(done, indent=1))
         return f'X: posted {key} ({done[key]})'
@@ -212,13 +270,20 @@ def post_once(key, text):
 def post_picks(site):
     if not site.get('picks'):
         return 'X: no bets today, nothing posted'
-    return post_once(site['date'], picks_text(site))          # key stays the bare date (posts made before results existed)
+    return post_once(site['date'], picks_posts(site))         # key stays the bare date (posts made before results existed)
 
 
-def post_results(site):
-    if not night(site):
-        return 'X: no settled bets for that night, nothing posted'
-    return post_once('results:' + site['date'], results_text(site))
+def post_results(site, today=None):
+    """Last night's results; on Mondays also the weekly scorecard for the 7 days before."""
+    out = [post_once('results:' + site['date'], results_text(site)) if night(site)
+           else 'X: no settled bets for that night, nothing posted']
+    today = today or datetime.now(ZoneInfo('America/New_York')).date()
+    if today.weekday() == 0:
+        monday, ledger = today.isoformat(), (site.get('record') or {}).get('ledger', [])
+        start = (today - timedelta(days=7)).isoformat()
+        if any(start <= b['date'] < monday and b.get('result') in SETTLED for b in ledger):
+            out.append(post_once('week:' + monday, week_text(ledger, monday)))
+    return '; '.join(out)
 
 
 if __name__ == '__main__':
@@ -233,6 +298,7 @@ if __name__ == '__main__':
         print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
     elif '--dry-run' in sys.argv:
         print(picks_text(site) if site.get('picks') else 'picks: no bets today', '\n---')
-        print(results_text(site) if night(site) else 'results: nothing settled for that night')
+        print(results_text(site) if night(site) else 'results: nothing settled for that night', '\n---')
+        print(week_text(site['record']['ledger'], sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
     else:
         print(post_picks(site))
