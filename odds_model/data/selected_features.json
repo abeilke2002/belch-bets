@@ -13,7 +13,11 @@
     "games_since_return",
     "last_absence_len",
     "out_fga",
-    "out_fga_share"
+    "out_fga_share",
+    "out_min_pos",
+    "n_active_pos",
+    "pos_vacancy",
+    "pos_code"
   ],
   "points": [
     "pts_season",
@@ -38,7 +42,11 @@
     "usage_share",
     "exp_extra_fga_new",
     "exp_extra_pts_new",
-    "exp_extra_pts_recent"
+    "exp_extra_pts_recent",
+    "out_min_pos",
+    "n_active_pos",
+    "pos_vacancy",
+    "pos_code"
   ],
   "minutes_groups": [
     "minutes averages",
@@ -47,7 +55,8 @@
     "rest",
     "scoring level",
     "return from absence",
-    "usage freed up"
+    "usage freed up",
+    "position absences"
   ],
   "points_groups": [
     "season averages",
@@ -58,7 +67,8 @@
     "previous season",
     "teammates out",
     "opponent defense",
-    "shot redistribution (new absences)"
+    "shot redistribution (new absences)",
+    "position absences"
   ],
   "classifier": [
     "line",

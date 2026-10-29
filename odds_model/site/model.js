@@ -6,6 +6,7 @@
    test_browser_model.js checks this file reproduces the Python projections. Works in the browser and in Node. */
 (function (root) {
   const OUT_COLS = ['out_ppg', 'out_min', 'out_fga', 'n_out', 'out_fga_share'];
+  const ROTATION_MPG = 5;                     // build_features.ROTATION_MPG
   const isMissing = v => v === null || v === undefined || Number.isNaN(v);
 
   // One tree: node = [feature, threshold, defaultLeft, missingIsNaN, left, right] or a leaf value.
@@ -48,15 +49,35 @@
     return r;
   }
 
+  // Minutes missing at each position and the rotation players left to play them (build_features.position_absences
+  // and finish_position): {pos_code: {out, act, rot}}
+  function positionAbsences(team, w) {
+    const by = {};
+    for (const p of team) {
+      const pos = p.x.pos_code;
+      if (isMissing(pos)) continue;
+      const m = isMissing(p.x.min_season) ? 0 : p.x.min_season, rot = p.x.min_season >= ROTATION_MPG ? 1 : 0;
+      const g = (by[pos] ??= { out: 0, act: 0, rot: 0 });
+      g.out += m * w(p); g.act += rot * (1 - w(p)); g.rot += rot;
+    }
+    return by;
+  }
+
   // A team's rows with the teammates-out totals rebuilt from {id: weight}; players at weight 1 are not projected
   function withAbsences(team, weights) {
     const w = p => weights[p.id] ?? 0;
     const sum = col => team.reduce((s, p) => s + (isMissing(p.x[col]) ? 0 : p.x[col] * w(p)), 0);
     const tot = { out_ppg: sum('pts_season'), out_min: sum('min_season'), out_fga: sum('fga_season'),
                   n_out: team.reduce((s, p) => s + w(p), 0) };
+    const byPos = positionAbsences(team, w);
     return team.filter(p => w(p) < 1).map(p => {
       const r = { ...p.x, ...tot };
       r.out_fga_share = r.out_fga / r.team_fga_pg;
+      const g = isMissing(p.x.pos_code) ? null : byPos[p.x.pos_code];
+      r.out_min_pos = g ? g.out : 0;
+      r.n_active_pos = Math.max(1, g ? g.act : 1);
+      r.n_rot_pos = Math.max(1, g ? g.rot : 1);
+      r.pos_vacancy = r.out_min_pos / r.n_active_pos;
       return { id: p.id, row: addRedistribution(r) };
     });
   }
@@ -67,6 +88,7 @@
     r.pred_minutes = predict(M.minutes, r);
     const cf = { ...row };
     for (const c of OUT_COLS) cf[c] = 0;
+    if (!isMissing(cf.n_rot_pos)) { cf.out_min_pos = 0; cf.pos_vacancy = 0; cf.n_active_pos = cf.n_rot_pos; }  // damping.no_injury
     addRedistribution(cf);
     cf.pred_minutes = predict(M.minutes, cf);
     const raw = predict(M.points, r), noInj = predict(M.points, cf);
@@ -89,6 +111,6 @@
     return teams;
   }
 
-  const api = { predict, addRedistribution, withAbsences, project, teamProjections, inflate };
+  const api = { predict, addRedistribution, positionAbsences, withAbsences, project, teamProjections, inflate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BBModel = api;
 })(typeof self !== 'undefined' ? self : this);

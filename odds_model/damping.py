@@ -18,9 +18,13 @@ def damp(adj, a, c):
 
 
 def no_injury(df):
-    """Same rows with nobody out tonight (history of past absences unchanged)."""
+    """Same rows with nobody out tonight (history of past absences unchanged); at each position the whole
+    rotation is available again."""
     cf = df.copy()
     cf[OUT_COLS] = 0
+    if 'n_rot_pos' in cf:
+        cf[['out_min_pos', 'pos_vacancy']] = 0
+        cf['n_active_pos'] = cf['n_rot_pos']
     return add_redistribution(cf)
 
 

@@ -167,6 +167,34 @@ def teammates_out(box, played):
     return out, team_out
 
 
+POS_CODE = {'G': 0, 'F': 1, 'C': 2}
+ROTATION_MPG = 5
+
+
+def position_absences(rows):
+    """Minutes missing at each position and who is left to play them. `rows`: every rostered player of each
+    team-game with GAME_ID, TEAM_ID, pos, mpg (season to date) and w (0 available .. 1 out). Per
+    (GAME_ID, TEAM_ID, pos): out_min_pos (absent teammates' mpg, weighted), n_active_pos (rotation players,
+    5+ mpg, still available, counting 1 - w) and n_rot_pos (rotation players whether out or not, for the
+    nobody-out baseline). Shared by build_features, predict_today and (ported) site/model.js."""
+    r = rows.assign(_out=rows['mpg'].fillna(0) * rows['w'], _rot=(rows['mpg'] >= ROTATION_MPG).astype(float))
+    r['_act'] = r['_rot'] * (1 - r['w'])
+    return r.groupby(['GAME_ID', 'TEAM_ID', 'pos']).agg(out_min_pos=('_out', 'sum'), n_active_pos=('_act', 'sum'),
+                                                         n_rot_pos=('_rot', 'sum')).reset_index()
+
+
+def finish_position(df):
+    """Fill in for players without a position or teammates there, and add pos_vacancy (missing minutes per
+    rotation player left at the position: about 43 for Clint Capela on 2026-10-28, Sengun and Adams out) and
+    pos_code (G/F/C as 0/1/2)."""
+    df['out_min_pos'] = df['out_min_pos'].fillna(0)
+    df['n_active_pos'] = df['n_active_pos'].fillna(1).clip(lower=1)
+    df['n_rot_pos'] = df['n_rot_pos'].fillna(1).clip(lower=1)
+    df['pos_vacancy'] = df['out_min_pos'] / df['n_active_pos']
+    df['pos_code'] = df['pos'].map(POS_CODE)
+    return df
+
+
 def team_fga_per_game(played):
     """Team FGA per game in the season before each game (for the share of shots freed up)."""
     tf = played.groupby(['TEAM_ID', 'season', 'GAME_ID', 'GAME_DATE'])['fieldGoalsAttempted'].sum() \
@@ -294,6 +322,15 @@ def main():
     pr['out_fga_5'] = g.transform(lambda x: x.shift(1).rolling(5, min_periods=1).mean())
     feat = feat.join(pr[['out_fga_season_avg', 'out_fga_5']])
     feat = add_redistribution(feat)
+    # Position: absent teammates (inferred absences, weight 1) and players dressed for the game (weight 0)
+    mpg = played[['PLAYER_ID', 'season', 'GAME_DATE', 'MINUTES']].copy()
+    mpg['mpg'] = mpg.groupby(['PLAYER_ID', 'season'])['MINUTES'].transform(lambda x: x.expanding().mean())
+    mpg = mpg.drop(columns='MINUTES').sort_values('GAME_DATE')
+    dressed = box.loc[box['played'] | box['cd_dnp'], ['PLAYER_ID', 'season', 'GAME_ID', 'TEAM_ID', 'GAME_DATE']]
+    rost = pd.concat([out[['PLAYER_ID', 'season', 'GAME_ID', 'TEAM_ID', 'GAME_DATE']].assign(w=1.0), dressed.assign(w=0.0)])
+    rost = pd.merge_asof(rost.sort_values('GAME_DATE'), mpg, on='GAME_DATE', by=['PLAYER_ID', 'season'],
+                         allow_exact_matches=False).merge(load_positions(), on='PLAYER_ID', how='left')
+    feat = finish_position(feat.merge(position_absences(rost), on=['GAME_ID', 'TEAM_ID', 'pos'], how='left'))
     feat[['opp_pos_ratio', 'opp_total_ratio']] = lookup_defense(
         feat[['OPP_ID', 'season', 'pos', 'GAME_DATE']], defense_history(played))
     feat['player_name'] = feat['firstName'].fillna('') + ' ' + feat['familyName'].fillna('')

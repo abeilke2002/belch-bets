@@ -17,8 +17,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from build_features import (absence_features, add_opponent, add_redistribution, defense_history,
-                            inferred_absences, load_positions, lookup_defense)
+from build_features import (absence_features, add_opponent, add_redistribution, defense_history, finish_position,
+                            inferred_absences, load_positions, lookup_defense, position_absences)
 from classifier import add_model_features, predict_over
 from config import DATA
 from name_map import norm
@@ -146,6 +146,8 @@ def features_as_of(games, day, schedule, out_names, out_weights=None, keep_out=F
         raise ValueError(f'No one playing on {day} has played a {season} game yet, so there is no '
                          f'current-season history to predict from.')
     f = f.merge(load_positions(), on='PLAYER_ID', how='left')
+    f = finish_position(f.merge(position_absences(f.assign(mpg=f['min_season'], w=f['out_w'])),
+                                on=['GAME_ID', 'TEAM_ID', 'pos'], how='left'))
     f['season'], f['GAME_DATE'] = season, pd.Timestamp(day)
     # Absence features: append tonight's game to the season history and reuse the training code
     tonight = f[['PLAYER_ID', 'TEAM_ID', 'GAME_ID', 'season', 'GAME_DATE']].assign(played=True, cd_dnp=False)
@@ -236,6 +238,11 @@ def with_absences(team, weights):
     t['n_out'] = w.sum()
     t['out_fga_share'] = t['out_fga'] / t['team_fga_pg']
     t = add_redistribution(t)
+    if 'pos' in t:                                    # position absences rebuilt from the same weights
+        t = t.drop(columns=['out_min_pos', 'n_active_pos', 'n_rot_pos', 'pos_vacancy', 'pos_code'], errors='ignore')
+        t = finish_position(t.merge(position_absences(t.assign(mpg=t['min_season'], w=w.values)),
+                                    on=['GAME_ID', 'TEAM_ID', 'pos'], how='left'))
+        t.index = w.index
     return t[w < 1]                                   # fully-out players aren't projected
 
 
