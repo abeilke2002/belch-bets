@@ -1,5 +1,6 @@
 // The site's Worker: serves the static pages (data/site) to anyone with the private link, and starts the daily
-// runs on time (scheduled(), crons in wrangler.jsonc): results at 9:00 AM ET, picks at 12:15 PM ET.
+// runs on time (scheduled(), crons in wrangler.jsonc): results at 9:00 AM ET, picks at 12:00 PM ET, and a closing-line
+// run whenever one of today's bets is about to tip.
 //
 // Private link: https://<site>/?k=<VIEW_KEY>. Opening it sets a cookie for 400 days (the browser maximum) and
 // redirects to the plain address, so later visits from that browser just work. Without the key or the cookie
@@ -38,12 +39,15 @@ export default {
     return out;
   },
 
-  // GitHub's own schedule starts runs hours late; a dispatch starts within a minute. Cron times are UTC, so each run
-  // has two crons (EDT and EST) and only the one at the right New York hour dispatches: 9 -> results, 12 -> picks.
+  // GitHub's own schedule starts runs hours late; a dispatch starts within a minute. Cron times are UTC, so the daily
+  // runs fire at both EDT and EST hours and only the one at the right New York hour dispatches: 9:00 results, 12:00 picks.
+  // The evening cron (every 15 min) starts a closing-line run only when a bet without a closing line tips within 20 min.
   async scheduled(controller, env, ctx) {
-    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
-      .format(new Date(controller.scheduledTime)));
-    const mode = { 9: 'results', 12: 'picks' }[hour];
+    const at = new Date(controller.scheduledTime);
+    const ny = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric',
+      minute: 'numeric', hour12: false }).formatToParts(at).map(p => [p.type, Number(p.value)]));
+    let mode = ny.minute === 0 ? { 9: 'results', 12: 'picks' }[ny.hour] : null;
+    if (!mode && controller.cron.startsWith('*/15')) mode = (await closeDue(env, at)) ? 'close' : null;
     if (!mode) return;
     const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
       method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode } }),
@@ -52,3 +56,14 @@ export default {
     if (r.status !== 204) throw new Error(`${mode} dispatch: GitHub said ${r.status}`);
   },
 };
+
+// Is a bet from today's picks (published picks.json) tipping in the next 20 minutes with no closing line yet?
+async function closeDue(env, at) {
+  const r = await env.ASSETS.fetch(new Request('https://site.local/picks.json'));
+  if (!r.ok) return false;
+  const site = await r.json(), ledger = site.record?.ledger || [];
+  const closed = new Set(ledger.filter(b => b.date === site.date && b.close != null).map(b => b.player));
+  const soon = at.getTime() + 20 * 60 * 1000;
+  return (site.picks || []).some(p => !closed.has(p.player) && p.commence_time &&
+    Date.parse(p.commence_time) > at.getTime() && Date.parse(p.commence_time) <= soon);
+}

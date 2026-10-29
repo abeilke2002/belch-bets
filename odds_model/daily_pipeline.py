@@ -1,7 +1,7 @@
 """The daily run: noon pick, closing line, next-morning settle. Writes the website's data file.
 
-    python daily_pipeline.py picks       # ~12:15 ET: noon odds + injury report -> the day's bets (or none)
-    python daily_pipeline.py close       # every ~15 min in the evening: closing lines for games with a bet
+    python daily_pipeline.py picks       # 12:00 ET: noon odds + injury report -> the day's bets (or none)
+    python daily_pipeline.py close       # ~10-20 min before a bet's tip (the Worker starts it): closing lines
     python daily_pipeline.py results     # next morning: box scores -> features -> settle the bets
 
     python daily_pipeline.py picks --replay --date 2026-03-19     # replay a past day from stored data

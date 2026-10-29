@@ -1,15 +1,15 @@
 # The daily Noon Line run, in GitHub's cloud. Times are UTC (ET + 4 until Nov 1, + 5 after).
-#   picks    ~12:15-1:15 PM ET  noon odds + injury report -> the pick -> site
-#   close    every 15 min, evenings: closing line for the pick's game (does nothing until near tip)
-#   results  ~9 AM ET: ESPN box scores -> settle the bet -> site
-# Also started by the site's "Update now" button (via the Cloudflare Worker) or by hand from the Actions tab.
+#   picks    12:00 PM ET   noon odds + injury report -> the day's bets -> site and X
+#   close    evenings, ~10-20 min before each bet's tip: closing lines for games with a bet
+#   results  9:00 AM ET    ESPN box scores -> settle the bets -> site and X
+# The Cloudflare Worker's crons start all three on time (worker.js); GitHub's own schedule below is only a late backup
+# for picks and results (it often starts hours late). Also runnable by hand from the Actions tab.
 name: daily
 
 on:
   schedule:
-    - cron: '15 17 * * *'               # picks
-    - cron: '*/15 22,23,0,1,2,3 * * *'   # close
-    - cron: '0 13 * * *'                 # results
+    - cron: '0 17 * * *'                # picks (backup; the Worker starts it at 12:00 PM ET)
+    - cron: '0 13 * * *'                 # results (backup; the Worker starts it at 9:00 AM ET)
   workflow_dispatch:
     inputs:
       mode:
@@ -56,7 +56,7 @@ jobs:
         working-directory: .
         run: |
           if [ -n "${{ inputs.mode }}" ]; then m="${{ inputs.mode }}"
-          elif [ "${{ github.event.schedule }}" = "15 17 * * *" ]; then m=picks
+          elif [ "${{ github.event.schedule }}" = "0 17 * * *" ]; then m=picks
           elif [ "${{ github.event.schedule }}" = "0 13 * * *" ]; then m=results
           else m=close; fi
           echo "mode=$m" >> "$GITHUB_OUTPUT"; echo "Running: $m"
