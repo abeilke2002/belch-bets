@@ -983,11 +983,13 @@ async function renderHistory() {
   $('scards').querySelectorAll('.scard').forEach(b => b.onclick = () => { HSEL = b.dataset.s; renderHistory(); });
 
   const s = SEASONS.find(x => x.season === HSEL), t = seasonSum(s.bets);
+  const E = s.bets.filter(b => typeof b.edge === 'number'), avgEdge = E.length ? E.reduce((a, b) => a + b.edge, 0) / E.length : null;
   $('h-title').textContent = `${s.season} · ${TAGS[s.kind]}`;
   $('h-note').textContent = s.note;
   $('h-stats').innerHTML = t.L.length ? [
     [`${sgn(t.units)}u`, 'profit', cls(t.units)], [`${t.wins}–${t.losses}`, `record, ${pct(t.wins / t.L.length, 0)}`, ''],
     [`${sgn(t.roi * 100)}%`, 'return on units risked', ''], [`${s.bets.length}`, 'plays', ''],
+    ...(avgEdge === null ? [] : [[`${sgn(avgEdge * 100)}%`, 'average edge', '']]),
   ].map(([n, k, c]) => `<div class="fig"><span class="n ${c}">${n}</span><span class="k">${k}</span></div>`).join('') : '';
   if (t.L.length) drawChart(t.L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled play.</p>';
   $('h-side').innerHTML = seasonDetails(t.L);
@@ -1037,7 +1039,7 @@ function histRow(b, link) {
   return `<tr${link ? ` class="go" data-date="${b.date}" title="Open this day"` : ''}>
     <td class="d">${short(b.date)}</td>
     <td><div class="name">${esc(b.player)} <span class="muted" style="font-weight:400">${cap(b.side)} ${b.line}</span></div>
-      <div class="small">${esc(b.team)} vs ${esc(opp)} · ${odds(b.price)} ${esc(b.book)} · ${b.stake}u${b.points != null ? ' · scored ' + b.points : ''}</div></td>
+      <div class="small">${esc(b.team)} vs ${esc(opp)} · ${odds(b.price)} ${esc(b.book)}${typeof b.edge === 'number' ? ' · edge ' + sgn(b.edge * 100) + '%' : ''} · ${b.stake}u${b.points != null ? ' · scored ' + b.points : ''}</div></td>
     <td class="r">${r}<div class="small ${settledResult(b.result) ? cls(b.units) : ''}">${settledResult(b.result) ? sgn(b.units, 2) + 'u' : ''}</div></td></tr>`;
 }
 
