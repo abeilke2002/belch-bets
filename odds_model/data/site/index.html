@@ -989,10 +989,9 @@ async function renderHistory() {
   $('h-stats').innerHTML = t.L.length ? [
     [`${sgn(t.units)}u`, 'profit', cls(t.units)], [`${t.wins}–${t.losses}`, `record, ${pct(t.wins / t.L.length, 0)}`, ''],
     [`${sgn(t.roi * 100)}%`, 'return on units risked', ''], [`${s.bets.length}`, 'plays', ''],
-    ...(avgEdge === null ? [] : [[`${sgn(avgEdge * 100)}%`, 'average edge', '']]),
   ].map(([n, k, c]) => `<div class="fig"><span class="n ${c}">${n}</span><span class="k">${k}</span></div>`).join('') : '';
   if (t.L.length) drawChart(t.L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled play.</p>';
-  $('h-side').innerHTML = seasonDetails(t.L);
+  $('h-side').innerHTML = seasonDetails(t.L, avgEdge);
 
   const months = {};
   [...s.bets].reverse().forEach(b => (months[b.date.slice(0, 7)] ||= []).push(b));
@@ -1009,8 +1008,8 @@ async function renderHistory() {
 
 const monthName = (m, opts = { month: 'long', year: 'numeric' }) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', opts);
 
-// The panel beside the season chart: best and worst month, longest runs of winning / losing days
-function seasonDetails(L) {
+// The panel beside the season chart: average edge, best and worst month, longest runs of winning / losing days
+function seasonDetails(L, avgEdge = null) {
   if (!L.length) return '<tr><td>Fills in once plays settle.</td></tr>';
   const u = bs => bs.reduce((a, b) => a + b.units, 0);
   const byMonth = {};
@@ -1025,6 +1024,7 @@ function seasonDetails(L) {
   const days = n => `${n} day${n === 1 ? '' : 's'}`;
   const mo = ([m, v]) => `${monthName(m, { month: 'short', year: 'numeric' })} · <span class="${cls(v)}">${sgn(v, 1)}u</span>`;
   return [
+    ...(avgEdge === null ? [] : [['Average edge', `${sgn(avgEdge * 100)}%`]]),
     ['Best month', mo(months[0])],
     ['Worst month', mo(months[months.length - 1])],
     ['Longest winning streak', days(streak(1))],
