@@ -15,6 +15,7 @@ gets 9_000_000_000 + ESPN id. Edit that file to fix a match.
     python pull_box_scores_espn.py --dates 2026-03-30 --out /tmp/x    # specific dates, elsewhere (testing)
 """
 import argparse
+import sys
 import datetime as dt
 import time
 from pathlib import Path
@@ -195,13 +196,22 @@ def main():
         days = [start + dt.timedelta(days=i) for i in range((today - start).days)]
 
     teams, match = teams_lookup(), PlayerMatcher()
-    new_box, new_info = [], []
+    new_box, new_info, failed = [], [], []
     for day in days:
-        for eid in finished_games(day):
+        try:
+            events = finished_games(day)
+        except Exception as e:
+            failed.append(f'{day} scoreboard: {type(e).__name__}: {e}')
+            continue
+        for eid in events:
             code = '2' + season_of(day)[2:4]
             if f'{code}9{eid}' in done:
                 continue
-            b, i, _ = game_rows(eid, teams, match)
+            try:                                # one game ESPN hasn't finished posting must not lose the others;
+                b, i, _ = game_rows(eid, teams, match)   # it isn't saved, so the next run tries it again
+            except Exception as e:
+                failed.append(f'{day} game {eid}: {type(e).__name__}: {e}')
+                continue
             new_box += b
             new_info += i
             time.sleep(0.3)
@@ -213,6 +223,10 @@ def main():
     unmatched = [n for n in match.new if not n['matched']]
     print(f'{season}: {len(new_info) // 2} new games, {len(new_box)} player rows | new player matches '
           f'{len(match.new)} ({len(unmatched)} not in past rosters: {[u["name"] for u in unmatched][:8]})')
+    for f in failed:
+        print('skipped (retried next run):', f, file=sys.stderr)
+    if failed and not new_box:
+        sys.exit(f'ESPN box scores: nothing downloaded; {len(failed)} failure(s), first: {failed[0]}')
 
 
 if __name__ == '__main__':

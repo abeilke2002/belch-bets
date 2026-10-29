@@ -575,7 +575,11 @@ def run_results():
     season = season_of(dt.datetime.now(ET).date() - dt.timedelta(days=1))
     # ESPN, not stats.nba.com: the NBA's sites refuse cloud servers (GitHub Actions)
     for script, args in [('pull_box_scores_espn.py', []), ('build_features.py', [])]:
-        subprocess.run([sys.executable, str(ROOT / script), *args], check=True, capture_output=True)
+        r = subprocess.run([sys.executable, str(ROOT / script), *args], capture_output=True, text=True)
+        if r.stderr.strip():
+            print(r.stderr.strip()[-1500:])         # warnings (e.g. a skipped game) show in the run log
+        if r.returncode != 0:
+            raise RuntimeError(f'{script} failed: ' + ' '.join((r.stderr or r.stdout).split())[-400:])
     return pd.read_parquet(DATA / 'player_games.parquet')
 
 
