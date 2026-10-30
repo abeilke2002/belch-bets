@@ -83,23 +83,19 @@ def fetch_report(ts, path, allow_fetch):
 EARLY = 10                                       # a same-day report from before 10 AM ET is stale by noon
 
 
-def noon_report(day, now, allow_fetch, late=False):
-    """(report, kind): the most recent same-day report at or before noon ET ('noon'), or before 10 AM ('early': the
-    NBA stopped updating overnight). late: the newest one up to now, which may be after noon ('late'; the backtest
-    only ever saw noon reports). Cached per kind, so a rerun can still find a newer one."""
-    path = lambda k: REPORT_DIR / f'{day}_{k}.csv'
-    if not allow_fetch:
-        return fetch_report(None, path('noon'), False), 'noon'
-    if path('noon').exists():
-        return fetch_report(None, path('noon'), False), 'noon'
+def noon_report(day, now, allow_fetch):
+    """(report, kind): the newest same-day report up to now. At the noon run that is the noon report ('noon', what the
+    backtest used); before 10 AM it is stale ('early': the NBA stopped updating overnight); a rerun after noon uses
+    the newest one ('late'). Each is cached under its own time, so a later rerun still finds a newer one."""
     noon = dt.datetime(day.year, day.month, day.day, 12, 0)
-    ts = now.replace(tzinfo=None) if late else min(noon, now.replace(tzinfo=None))
+    if not allow_fetch:
+        return fetch_report(None, REPORT_DIR / f'{day}_noon.csv', False), 'noon'
+    ts = max(min(now.replace(tzinfo=None), dt.datetime(day.year, day.month, day.day, 23, 45)), noon - dt.timedelta(hours=12))
     ts = ts.replace(minute=ts.minute - ts.minute % 15, second=0, microsecond=0)
     while ts.date() == day:                            # newest first, every 15 min back to midnight
-        kind = 'late' if ts > noon else 'early' if ts.hour < EARLY else 'noon'
-        rep = fetch_report(ts, path(kind), True)
+        rep = fetch_report(ts, REPORT_DIR / f"{day}_{'noon' if ts == noon else ts.strftime('%H%M')}.csv", True)
         if rep is not None:
-            return rep, kind
+            return rep, 'late' if ts > noon else 'early' if ts.hour < EARLY else 'noon'
         ts -= dt.timedelta(minutes=15)
     return None, None
 
@@ -199,7 +195,7 @@ def injury_weights(games, day, schedule, now, allow_fetch, over=None, late=False
     teams = set(schedule['TEAM_ID'])
 
     sources, rows = {}, []
-    noon, kind = noon_report(day, now, allow_fetch, late)
+    noon, kind = noon_report(day, now, allow_fetch)
     reports = [(f'{kind} report', tidy(noon, day))] if noon is not None else []
     if noon is None or reports[0][1]['not_submitted'].any():
         prev = day - dt.timedelta(days=1)
