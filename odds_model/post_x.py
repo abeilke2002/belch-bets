@@ -14,6 +14,7 @@ no site link (the site is private, and a link costs more per post).
 
     python post_x.py --dry-run       # print what today's two posts would say
     ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
+    ANNOUNCE='picks' python post_x.py --announce    # repost today's picks after a rerun changed them ("Updated")
     python post_x.py --connect       # on your computer: approve posting in X, saves the X_REFRESH_TOKEN secret
 """
 import base64
@@ -78,7 +79,7 @@ def pick_block(p):
     return f"{p['player']} {side(p)} {p['line']:g} ({p['price']:+d} {BOOK.get(p['book'], p['book'])})\n{why}"
 
 
-def picks_posts(site):
+def picks_posts(site, note=''):
     """Today's bets, best edge first, each with its reason. The first post carries the date, stake and season record;
     bets that don't fit continue in replies (a thread)."""
     bets = sorted(site.get('picks') or [], key=lambda p: -p['edge'])
@@ -86,7 +87,7 @@ def picks_posts(site):
     stake = f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"
     tail = stake + (f" · Season {record(ledger, pct=False)}" if any(b.get('result') in SETTLED for b in ledger) else '')
     tail += '\n' + TAGS_PICKS
-    head = f"The Noon Line · {day_label(site['date'])}"
+    head = f"The Noon Line · {day_label(site['date'])}{note}"
     blocks, posts = [pick_block(p) for p in bets], []
     cur = [head]
     for blk in blocks:
@@ -295,6 +296,10 @@ if __name__ == '__main__':
         print('X: authorized, token scopes:', authorize(code, verifier))
     elif '--announce' in sys.argv:                          # one-off post (workflow 'announce' mode), text from $ANNOUNCE
         text = os.environ.get('ANNOUNCE', '').strip()
+        if text.lower() == 'picks':                       # the day's picks changed after the noon post
+            posts = picks_posts(site, ' · Updated')
+            print(post_once(f"{site['date']}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts))
+            sys.exit()
         print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
     elif '--dry-run' in sys.argv:
         print(picks_text(site) if site.get('picks') else 'picks: no bets today', '\n---')
