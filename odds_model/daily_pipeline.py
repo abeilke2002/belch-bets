@@ -11,7 +11,8 @@
 The bets follow the backtested rule exactly:
   absences   noon injury report: Out/Doubtful count fully, Questionable half; if the noon report is missing or a
              team has not filed, the previous evening's report; teams on neither fall back to whoever missed their
-             previous game. Manual overrides (data/live/overrides.json, --set) win over all of these
+             previous game. If the NBA hasn't posted any report by noon, the Worker reruns the picks when it appears
+             (--late-report; X waits for that run, posting by 3 PM regardless). Manual overrides (data/live/overrides.json, --set) win over all of these
   skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back;
              no bets at all from April 1 to the end of the regular season (rotations change, the books know first);
              a team's players in its first 3 games after a player leaves it midseason (roles reshuffle),
@@ -77,13 +78,14 @@ def fetch_report(ts, path, allow_fetch):
     return fetch(ts, path)
 
 
-def noon_report(day, now, allow_fetch):
-    """The most recent report at or before noon ET (falls back to earlier same-day reports)."""
-    path = REPORT_DIR / f'{day}_noon.csv'
+def noon_report(day, now, allow_fetch, late=False):
+    """The most recent report at or before noon ET (falls back to earlier same-day reports). late: the NBA hadn't
+    posted one by noon, so take the newest one now (saved separately; the backtest only ever saw noon reports)."""
+    path = REPORT_DIR / f'{day}_{"late" if late else "noon"}.csv'
     if path.exists() or not allow_fetch:
         return fetch_report(None, path, False)
     noon = dt.datetime(day.year, day.month, day.day, 12, 0)
-    latest = min(noon, now.replace(tzinfo=None))
+    latest = now.replace(tzinfo=None) if late else min(noon, now.replace(tzinfo=None))
     for back in range(0, 4 * 60 + 1, 15):              # newest first, every 15 min back 4 hours
         ts = latest - dt.timedelta(minutes=back)
         ts = ts.replace(minute=ts.minute - ts.minute % 15, second=0, microsecond=0)
@@ -147,7 +149,7 @@ def apply_overrides(weights, status, roster, teams, over):
     return weights, status
 
 
-def injury_weights(games, day, schedule, now, allow_fetch, over=None):
+def injury_weights(games, day, schedule, now, allow_fetch, over=None, late=False):
     """{PLAYER_ID: weight}, per-player status table, and where each team's info came from."""
     season = season_of(day)
     cur = games[(games['season'] == season) & (games['GAME_DATE'] < pd.Timestamp(day))]
@@ -159,7 +161,12 @@ def injury_weights(games, day, schedule, now, allow_fetch, over=None):
 
     sources, rows = {}, []
     noon = noon_report(day, now, allow_fetch)
-    reports = [('noon report', tidy(noon, day))] if noon is not None else []
+    if noon is None and late:
+        noon = noon_report(day, now, allow_fetch, late=True)
+        label = 'late report'
+    else:
+        label = 'noon report'
+    reports = [(label, tidy(noon, day))] if noon is not None else []
     if noon is None or reports[0][1]['not_submitted'].any():
         prev = day - dt.timedelta(days=1)
         path = REPORT_DIR / f'{day}_prevday.csv'
@@ -197,7 +204,8 @@ def injury_weights(games, day, schedule, now, allow_fetch, over=None):
         sources.update({t: 'previous game' for t in missing})
     if over:
         weights, status = apply_overrides(weights, status, roster, teams, over)
-    return weights, status, sources, list(unmatched['name'])
+    return weights, status, sources, list(unmatched['name']), (label.split()[0] if noon is not None else
+                                                                ('none' if late else 'missing'))
 
 
 # ---------------------------------------------------------------- odds
@@ -317,7 +325,7 @@ def make_board(f, status, day, left=None):
     return b, list(b.index[bet.reindex(b.index)])
 
 
-def run_picks(day, paths, replay, now, extra=None):
+def run_picks(day, paths, replay, now, extra=None, late=False):
     games = pd.read_parquet(DATA / 'player_games.parquet')
     schedule = load_schedule(games, day, from_history=replay)
     site = {'date': str(day), 'updated': now.strftime('%Y-%m-%d %I:%M %p ET'), 'status': 'ok', 'message': '',
@@ -327,7 +335,8 @@ def run_picks(day, paths, replay, now, extra=None):
         return site
     odds_note = 'replay: historical noon lines' if replay else pull_noon_odds()
     over = {} if replay else {**load_overrides(day), **(extra or {})}
-    weights, status, sources, unmatched = injury_weights(games, day, schedule, now, allow_fetch=not replay, over=over)
+    weights, status, sources, unmatched, report = injury_weights(games, day, schedule, now, allow_fetch=not replay,
+                                                                 over=over, late=late)
     om = joblib.load(DATA / 'models' / 'over_model.pkl')
     try:
         f = predict_day(games, day, schedule, out_weights=weights)
@@ -341,6 +350,7 @@ def run_picks(day, paths, replay, now, extra=None):
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['slate']['overrides'] = over
+    site['slate']['report'] = report            # noon / late / missing (the Worker reruns when it appears) / none
     site['props'] = props_payload(board)
     site['model'] = model_payload(om)
     site['roster'] = roster_payload(games, day, schedule, weights, status, export_model(paths))
@@ -717,6 +727,8 @@ def main():
     ap.add_argument('--set', default=os.environ.get('OVERRIDE', ''),
                     help='picks: "Player=Status, ..." (Available/Probable/Questionable/Doubtful/Out), saved for the day')
     ap.add_argument('--if-missing', action='store_true', help="picks: do nothing if today's picks already ran")
+    ap.add_argument('--late-report', action='store_true',
+                    help="picks: today's ran without an injury report; redo it with the newest one (the Worker starts this)")
     args = ap.parse_args()
     paths = Paths(args.replay)
     stamp = dt.datetime.now(ET)
@@ -730,11 +742,14 @@ def main():
             if args.if_missing and prev.get('date') == str(days[0]) and prev.get('status') == 'ok':
                 print(f'{days[0]}: picks already ran at {prev.get("updated")}; backup run does nothing')
                 return
+            if args.late_report and (prev.get('slate') or {}).get('report') != 'missing':
+                print(f'{days[0]}: picks already used an injury report; nothing to redo')
+                return
             extra = parse_overrides(args.set)            # checked before anything runs
             games = pd.read_parquet(DATA / 'player_games.parquet') if args.replay else None
             for day in days:
                 now = dt.datetime(day.year, day.month, day.day, 12, 10, tzinfo=ET) if args.replay else stamp
-                site = run_picks(day, paths, args.replay, now, extra)
+                site = run_picks(day, paths, args.replay, now, extra, args.late_report)
                 if extra and not args.replay:
                     save_overrides(day, site['slate']['overrides'])
                 if args.replay:
@@ -765,7 +780,10 @@ def main():
             print(deploy(paths))
             if args.mode in ('picks', 'results'):        # once each per day, after the site is live; never fails the run
                 from post_x import post_picks, post_results
-                print(post_picks(site) if args.mode == 'picks' else post_results(site))
+                if args.mode == 'picks' and site.get('slate', {}).get('report') == 'missing':
+                    print('X: waiting for the injury report (the rerun posts)')
+                else:
+                    print(post_picks(site) if args.mode == 'picks' else post_results(site))
     except OverrideError as e:                   # a typo in an override: say so, leave the site as it was
         print(f'ERROR: {e}')
         sys.exit(1)

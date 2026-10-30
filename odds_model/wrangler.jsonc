@@ -8,7 +8,8 @@
   "main": "worker.js",
   // Daily runs: results 9:00 AM ET (13:00 UTC in EDT, 14:00 in EST), picks 12:00 PM ET (16:00 / 17:00); worker.js keeps
   // the right one. Evenings every 15 min (5 PM-12:45 AM ET): a closing-line run only when a bet is about to tip.
-  "triggers": { "crons": ["0 13,14,16,17 * * *", "*/15 21-23,0-4 * * *"] },
+  // Afternoons every 10 min (12-3 PM ET): a picks rerun once a late injury report is posted.
+  "triggers": { "crons": ["0 13,14,16,17 * * *", "*/15 21-23,0-4 * * *", "*/10 16-20 * * *"] },
   "assets": {
     "directory": "data/site",
     "binding": "ASSETS",

@@ -1,6 +1,6 @@
 // The site's Worker: serves the static pages (data/site) to anyone with the private link, and starts the daily
-// runs on time (scheduled(), crons in wrangler.jsonc): results at 9:00 AM ET, picks at 12:00 PM ET, and a closing-line
-// run whenever one of today's bets is about to tip.
+// runs on time (scheduled(), crons in wrangler.jsonc): results at 9:00 AM ET, picks at 12:00 PM ET, a picks rerun as soon
+// as the NBA posts the day's injury report if it wasn't out by noon, and a closing-line run whenever a bet is about to tip.
 //
 // Private link: https://<site>/?k=<VIEW_KEY>. Opening it sets a cookie for 400 days (the browser maximum) and
 // redirects to the plain address, so later visits from that browser just work. Without the key or the cookie
@@ -46,11 +46,13 @@ export default {
     const at = new Date(controller.scheduledTime);
     const ny = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric',
       minute: 'numeric', hour12: false }).formatToParts(at).map(p => [p.type, Number(p.value)]));
-    let mode = ny.minute === 0 ? { 9: 'results', 12: 'picks' }[ny.hour] : null;
+    let mode = controller.cron.startsWith('0 ') && ny.minute === 0 ? { 9: 'results', 12: 'picks' }[ny.hour] : null, args = '';
     if (!mode && controller.cron.startsWith('*/15')) mode = (await closeDue(env, at)) ? 'close' : null;
+    if (!mode && controller.cron.startsWith('*/10') && ny.hour >= 12 && ny.hour < 16 && await lateReport(env, at, ny))
+      [mode, args] = ['picks', '--late-report'];
     if (!mode) return;
     const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
-      method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode } }),
+      method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { mode, args } }),
       headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json',
                  'x-github-api-version': '2022-11-28', 'user-agent': 'belch-bets-worker' } });
     if (r.status !== 204) throw new Error(`${mode} dispatch: GitHub said ${r.status}`);
@@ -66,4 +68,21 @@ async function closeDue(env, at) {
   const soon = at.getTime() + 20 * 60 * 1000;
   return (site.picks || []).some(p => !closed.has(p.player) && p.commence_time &&
     Date.parse(p.commence_time) > at.getTime() && Date.parse(p.commence_time) <= soon);
+}
+
+// Today's picks ran without an injury report (the NBA hadn't posted one by noon): is one up now? At 3 PM, rerun anyway so
+// the X post goes out. Report PDFs are named by ET time in 15-minute steps; a missing one answers 403.
+async function lateReport(env, at, ny) {
+  const r = await env.ASSETS.fetch(new Request('https://site.local/picks.json'));
+  if (!r.ok) return false;
+  const site = await r.json(), day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(at);
+  if (site.date !== day || site.slate?.report !== 'missing') return false;
+  if (ny.hour >= 15) return true;
+  for (let m = ny.hour * 60 + ny.minute - ny.minute % 15; m >= 12 * 60; m -= 15) {
+    const h = Math.floor(m / 60), h12 = String(h % 12 || 12).padStart(2, '0'), mm = String(m % 60).padStart(2, '0');
+    const res = await fetch(`https://ak-static.cms.nba.com/referee/injury/Injury-Report_${day}_${h12}_${mm}${h < 12 ? 'AM' : 'PM'}.pdf`,
+                            { method: 'HEAD' });
+    if (res.ok) return true;
+  }
+  return false;
 }
