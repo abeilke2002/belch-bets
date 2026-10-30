@@ -1,6 +1,6 @@
 {
  "date": "2026-10-30",
- "updated": "2026-10-30 12:12 PM ET",
+ "updated": "2026-10-30 12:19 PM ET",
  "status": "ok",
  "message": "",
  "picks": [
@@ -763,7 +763,8 @@
   ],
   "overrides": {
    "Luka Doncic": "Available"
-  }
+  },
+  "report": "missing"
  },
  "n_props": 130,
  "n_eligible": 118,
