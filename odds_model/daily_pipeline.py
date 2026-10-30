@@ -5,6 +5,7 @@
     python daily_pipeline.py results     # next morning: box scores -> features -> settle the bets
 
     python daily_pipeline.py picks --set "Luka Doncic=Available"   # override a status (saved), rerun the day
+    python daily_pipeline.py remove --set "Daniel Gafford=price moved"   # drop a bet you couldn't get (no rerun)
     python daily_pipeline.py picks --replay --date 2026-03-19     # replay a past day from stored data
     python daily_pipeline.py picks --replay --start 2026-03-01 --end 2026-03-31
 
@@ -50,6 +51,7 @@ MIN_EDGE = 0.02
 STAKE = 1.0
 REPORT_DIR = DATA / 'injury_reports'
 OVERRIDES = DATA / 'live' / 'overrides.json'
+REMOVED = DATA / 'live' / 'removed.json'              # {date: {player: why}}: bets taken off by hand (price gone)
 STATUSES = {'Available', 'Probable', 'Questionable', 'Doubtful', 'Out'}
 LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'commence_time', 'side', 'line', 'price',
             'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units']
@@ -107,6 +109,36 @@ def tidy(rep, day):
     rep['Team'] = rep['Team'].ffill()
     rep['not_submitted'] = rep['Reason'].astype(str).str.contains('NOT YET SUBMITTED')
     return rep
+
+
+def load_json(path):
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def remove_bets(paths, text):
+    """Take bets off today's page and record by hand (the price is gone), without rerunning the odds.
+    'Daniel Gafford=price moved, ...'; saved so a later rerun keeps them off."""
+    site = json.loads((paths.site / 'picks.json').read_text())
+    want = {n.strip(): (w.strip() or 'price moved') for n, _, w in
+            (x.partition('=') for x in text.replace(';', ',').split(',') if x.strip())}
+    bets = {norm(p['player']): p['player'] for p in site.get('picks', [])}
+    hit = {bets[norm(n)]: w for n, w in want.items() if norm(n) in bets}
+    if missing := [n for n in want if norm(n) not in bets]:
+        raise OverrideError(f"not one of today's bets: {missing} (bets: {list(bets.values())})")
+    site['picks'] = [p for p in site['picks'] if p['player'] not in hit]
+    for r in site.get('board', []):
+        if r['player'] in hit:
+            r.update(play='skip', why=f'Removed by hand ({hit[r["player"]]})', stake=None)
+    for r in site.get('props', []):
+        if r['player'] in hit:
+            r['skip'] = f'removed by hand ({hit[r["player"]]})'
+    log = read_log(paths)
+    log[~((log['date'].astype(str) == site['date']) & log['player'].isin(hit))].to_csv(paths.log, index=False)
+    allx = load_json(REMOVED)
+    allx[site['date']] = {**allx.get(site['date'], {}), **hit}
+    REMOVED.write_text(json.dumps(allx, indent=1, sort_keys=True) + '\n')
+    write_site(paths, site)
+    return f"removed {', '.join(hit)} from {site['date']}; bets now: {[p['player'] for p in site['picks']] or 'none'}"
 
 
 def load_overrides(day):
@@ -304,7 +336,7 @@ def on_other_team(b):
     return [isinstance(h, str) and not (h.endswith(t) or str(a).endswith(t)) for t, h, a in zip(b['team'], b['home_team'], b['away_team'])]
 
 
-def make_board(f, status, day, left=None):
+def make_board(f, status, day, left=None, removed=None):
     """Every prop with a line, scored, with what the rule does with it."""
     b = f.dropna(subset=['early_line', 'p_over']).copy()
     st = status.drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')['status']
@@ -317,9 +349,11 @@ def make_board(f, status, day, left=None):
     b['book'] = np.where(over, b['early_best_over_book'], b['early_best_under_book'])
     b['p_side'] = np.where(over, b['p_over'], 1 - b['p_over'])
     gone = b['team'].map(left or {})
-    b['skip'] = np.select([np.full(len(b), season_end(day)), np.asarray(on_other_team(b), dtype=bool), gone.notna(),
+    by_hand = b['player_name'].map(removed or {})
+    b['skip'] = np.select([by_hand.notna(), np.full(len(b), season_end(day)), np.asarray(on_other_team(b), dtype=bool), gone.notna(),
                            b['status'].isin(ON_REPORT), b['rest_days'] == 1],
-                          ['last two weeks of the season', 'new team, no games yet',
+                          ['removed by hand (' + by_hand.fillna('').astype(str) + ')', 'last two weeks of the season',
+                           'new team, no games yet',
                            'teammate traded (game ' + (gone.fillna(0) + 1).astype(int).astype(str) + ' of 3 since)',
                            'on injury report (' + b['status'].fillna('') + ')', 'back-to-back'], '')
     bet = (b['skip'] == '') & (b['edge'] >= MIN_EDGE)
@@ -351,7 +385,8 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
     if 'p_over' not in f:
         site['status'], site['message'] = 'error', 'No noon lines were found for today\'s games.'
         return site
-    board, bet_idx = make_board(f, status, day, left_behind(games, day, None if replay else espn_rosters(day)))
+    board, bet_idx = make_board(f, status, day, left_behind(games, day, None if replay else espn_rosters(day)),
+                                {} if replay else load_json(REMOVED).get(str(day), {}))
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['slate']['overrides'] = over
@@ -722,7 +757,7 @@ def error_banner(paths, mode, err):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('mode', choices=['picks', 'close', 'results'])
+    ap.add_argument('mode', choices=['picks', 'close', 'results', 'remove'])
     ap.add_argument('--replay', action='store_true', help='use stored data only (no API calls)')
     ap.add_argument('--date', help='picks: day to run (default today, ET)')
     ap.add_argument('--start')
@@ -766,6 +801,8 @@ def main():
             if not args.replay and site['picks']:
                 notify(f"{len(site['picks'])} bet(s): " + ', '.join(f"{p['player']} {p['side'].lower()} {p['line']}"
                                                                    for p in site['picks']))
+        elif args.mode == 'remove':
+            print(remove_bets(paths, args.set))
         elif args.mode == 'close':
             msg = run_close(paths, args.window)
             print(msg)

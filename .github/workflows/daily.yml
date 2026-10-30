@@ -13,13 +13,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: picks, close, results, announce (post the text in args to X) or xauth (args = code verifier)
+        description: picks, close, results, remove (drop a bet, names in override), announce (post the text in args to X) or xauth
         required: true
         default: picks
         type: choice
-        options: [picks, close, results, announce, xauth]
+        options: [picks, close, results, remove, announce, xauth]
       override:
-        description: 'picks: fix a status and rerun today, e.g. Luka Doncic=Available (or =Out), comma-separated'
+        description: 'picks: fix a status and rerun, e.g. Luka Doncic=Available. remove: bets to drop, e.g. Daniel Gafford=price moved'
         required: false
         default: ''
       args:
@@ -76,7 +76,7 @@ jobs:
         with: { node-version: '20' }
       - run: pip install -q -r ../requirements.txt
       - name: Build features from the box scores
-        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce' && steps.mode.outputs.mode != 'xauth'
+        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce' && steps.mode.outputs.mode != 'xauth' && steps.mode.outputs.mode != 'remove'
         run: python build_features.py > /dev/null
       - name: Run the pipeline
         env:
