@@ -70,13 +70,13 @@ async function closeDue(env, at) {
     Date.parse(p.commence_time) > at.getTime() && Date.parse(p.commence_time) <= soon);
 }
 
-// Today's picks ran without an injury report (the NBA hadn't posted one by noon): is one up now? At 3 PM, rerun anyway so
+// Today's picks ran without a fresh injury report (none since 10 AM by noon): is one up now? At 3 PM, rerun anyway so
 // the X post goes out. Report PDFs are named by ET time in 15-minute steps; a missing one answers 403.
 async function lateReport(env, at, ny) {
   const r = await env.ASSETS.fetch(new Request('https://site.local/picks.json'));
   if (!r.ok) return false;
   const site = await r.json(), day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(at);
-  if (site.date !== day || site.slate?.report !== 'missing') return false;
+  if (site.date !== day || !['missing', 'early'].includes(site.slate?.report)) return false;
   if (ny.hour >= 15) return true;
   for (let m = ny.hour * 60 + ny.minute - ny.minute % 15; m >= 12 * 60; m -= 15) {
     const h = Math.floor(m / 60), h12 = String(h % 12 || 12).padStart(2, '0'), mm = String(m % 60).padStart(2, '0');

@@ -11,7 +11,7 @@
 The bets follow the backtested rule exactly:
   absences   noon injury report: Out/Doubtful count fully, Questionable half; if the noon report is missing or a
              team has not filed, the previous evening's report; teams on neither fall back to whoever missed their
-             previous game. If the NBA hasn't posted any report by noon, the Worker reruns the picks when it appears
+             previous game. If the NBA hasn't posted a report since 10 AM by noon, the Worker reruns the picks when it appears
              (--late-report; X waits for that run, posting by 3 PM regardless). Manual overrides (data/live/overrides.json, --set) win over all of these
   skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back;
              no bets at all from April 1 to the end of the regular season (rotations change, the books know first);
@@ -78,21 +78,28 @@ def fetch_report(ts, path, allow_fetch):
     return fetch(ts, path)
 
 
+EARLY = 10                                       # a same-day report from before 10 AM ET is stale by noon
+
+
 def noon_report(day, now, allow_fetch, late=False):
-    """The most recent report at or before noon ET (falls back to earlier same-day reports). late: the NBA hadn't
-    posted one by noon, so take the newest one now (saved separately; the backtest only ever saw noon reports)."""
-    path = REPORT_DIR / f'{day}_{"late" if late else "noon"}.csv'
-    if path.exists() or not allow_fetch:
-        return fetch_report(None, path, False)
+    """(report, kind): the most recent same-day report at or before noon ET ('noon'), or before 10 AM ('early': the
+    NBA stopped updating overnight). late: the newest one up to now, which may be after noon ('late'; the backtest
+    only ever saw noon reports). Cached per kind, so a rerun can still find a newer one."""
+    path = lambda k: REPORT_DIR / f'{day}_{k}.csv'
+    if not allow_fetch:
+        return fetch_report(None, path('noon'), False), 'noon'
+    if path('noon').exists():
+        return fetch_report(None, path('noon'), False), 'noon'
     noon = dt.datetime(day.year, day.month, day.day, 12, 0)
-    latest = now.replace(tzinfo=None) if late else min(noon, now.replace(tzinfo=None))
-    for back in range(0, 4 * 60 + 1, 15):              # newest first, every 15 min back 4 hours
-        ts = latest - dt.timedelta(minutes=back)
-        ts = ts.replace(minute=ts.minute - ts.minute % 15, second=0, microsecond=0)
-        rep = fetch_report(ts, path, True)
+    ts = now.replace(tzinfo=None) if late else min(noon, now.replace(tzinfo=None))
+    ts = ts.replace(minute=ts.minute - ts.minute % 15, second=0, microsecond=0)
+    while ts.date() == day:                            # newest first, every 15 min back to midnight
+        kind = 'late' if ts > noon else 'early' if ts.hour < EARLY else 'noon'
+        rep = fetch_report(ts, path(kind), True)
         if rep is not None:
-            return rep
-    return None
+            return rep, kind
+        ts -= dt.timedelta(minutes=15)
+    return None, None
 
 
 def tidy(rep, day):
@@ -160,13 +167,8 @@ def injury_weights(games, day, schedule, now, allow_fetch, over=None, late=False
     teams = set(schedule['TEAM_ID'])
 
     sources, rows = {}, []
-    noon = noon_report(day, now, allow_fetch)
-    if noon is None and late:
-        noon = noon_report(day, now, allow_fetch, late=True)
-        label = 'late report'
-    else:
-        label = 'noon report'
-    reports = [(label, tidy(noon, day))] if noon is not None else []
+    noon, kind = noon_report(day, now, allow_fetch, late)
+    reports = [(f'{kind} report', tidy(noon, day))] if noon is not None else []
     if noon is None or reports[0][1]['not_submitted'].any():
         prev = day - dt.timedelta(days=1)
         path = REPORT_DIR / f'{day}_prevday.csv'
@@ -204,8 +206,11 @@ def injury_weights(games, day, schedule, now, allow_fetch, over=None, late=False
         sources.update({t: 'previous game' for t in missing})
     if over:
         weights, status = apply_overrides(weights, status, roster, teams, over)
-    return weights, status, sources, list(unmatched['name']), (label.split()[0] if noon is not None else
-                                                                ('none' if late else 'missing'))
+    # report: noon / late; early or missing = no fresh report, so the Worker watches for one; none = gave up (3 PM)
+    report = kind or 'missing'
+    if late and report in ('early', 'missing'):
+        report = 'none'
+    return weights, status, sources, list(unmatched['name']), report
 
 
 # ---------------------------------------------------------------- odds
@@ -350,7 +355,7 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['slate']['overrides'] = over
-    site['slate']['report'] = report            # noon / late / missing (the Worker reruns when it appears) / none
+    site['slate']['report'] = report            # noon / late / early or missing (the Worker reruns when one appears) / none
     site['props'] = props_payload(board)
     site['model'] = model_payload(om)
     site['roster'] = roster_payload(games, day, schedule, weights, status, export_model(paths))
@@ -742,7 +747,7 @@ def main():
             if args.if_missing and prev.get('date') == str(days[0]) and prev.get('status') == 'ok':
                 print(f'{days[0]}: picks already ran at {prev.get("updated")}; backup run does nothing')
                 return
-            if args.late_report and (prev.get('slate') or {}).get('report') != 'missing':
+            if args.late_report and (prev.get('slate') or {}).get('report') not in ('missing', 'early'):
                 print(f'{days[0]}: picks already used an injury report; nothing to redo')
                 return
             extra = parse_overrides(args.set)            # checked before anything runs
@@ -780,7 +785,7 @@ def main():
             print(deploy(paths))
             if args.mode in ('picks', 'results'):        # once each per day, after the site is live; never fails the run
                 from post_x import post_picks, post_results
-                if args.mode == 'picks' and site.get('slate', {}).get('report') == 'missing':
+                if args.mode == 'picks' and site.get('slate', {}).get('report') in ('missing', 'early'):
                     print('X: waiting for the injury report (the rerun posts)')
                 else:
                     print(post_picks(site) if args.mode == 'picks' else post_results(site))
