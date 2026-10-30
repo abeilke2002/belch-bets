@@ -11,7 +11,7 @@
 The bets follow the backtested rule exactly:
   absences   noon injury report: Out/Doubtful count fully, Questionable half; if the noon report is missing or a
              team has not filed, the previous evening's report; teams on neither fall back to whoever missed their
-             previous game. Manual overrides (data/overrides.json, --set) win over all of these
+             previous game. Manual overrides (data/live/overrides.json, --set) win over all of these
   skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back;
              no bets at all from April 1 to the end of the regular season (rotations change, the books know first);
              a team's players in its first 3 games after a player leaves it midseason (roles reshuffle),
@@ -48,7 +48,7 @@ WEIGHT = {'Out': 1.0, 'Doubtful': 1.0, 'Questionable': 0.5}
 MIN_EDGE = 0.02
 STAKE = 1.0
 REPORT_DIR = DATA / 'injury_reports'
-OVERRIDES = DATA / 'overrides.json'
+OVERRIDES = DATA / 'live' / 'overrides.json'
 STATUSES = {'Available', 'Probable', 'Questionable', 'Doubtful', 'Out'}
 LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'commence_time', 'side', 'line', 'price',
             'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units']
