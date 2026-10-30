@@ -747,7 +747,7 @@ def main():
             if args.if_missing and prev.get('date') == str(days[0]) and prev.get('status') == 'ok':
                 print(f'{days[0]}: picks already ran at {prev.get("updated")}; backup run does nothing')
                 return
-            if args.late_report and (prev.get('slate') or {}).get('report') not in ('missing', 'early'):
+            if args.late_report and (prev.get('slate') or {}).get('report') not in ('missing', 'early', 'none'):
                 print(f'{days[0]}: picks already used an injury report; nothing to redo')
                 return
             extra = parse_overrides(args.set)            # checked before anything runs
