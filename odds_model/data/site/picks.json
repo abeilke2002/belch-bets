@@ -125,67 +125,6 @@
     }
    ],
    "link": "https://sportsbook.draftkings.com/?outcomes=0QA384112053%232342509321_13L42648Q11948178340Q20"
-  },
-  {
-   "date": "2026-10-30",
-   "player": "Daniel Gafford",
-   "PLAYER_ID": 1629655,
-   "team": "DAL",
-   "opponent": "HOU",
-   "event_id": "b9778d0e3a26167eb49901dcae7eeb98",
-   "commence_time": "2026-10-31T00:10:00Z",
-   "side": "UNDER",
-   "line": 7.5,
-   "price": 100,
-   "book": "BetMGM",
-   "p_side": 0.5244,
-   "edge": 0.0244,
-   "stake": 1.0,
-   "opp": "HOU",
-   "mkt": 0.4985,
-   "proj": 6.4,
-   "sigma": 5.0,
-   "p": 0.5244,
-   "be": 0.5,
-   "season": 6.6,
-   "last5": 6.6,
-   "play": "bet",
-   "why": "",
-   "books": [
-    {
-     "book": "BetMGM",
-     "line": 7.5,
-     "price": 100,
-     "be": 0.5,
-     "link": "https://sports.{state}.betmgm.com/en/sports?options=6:48514-4294132-6955577&type=Single",
-     "edge": 0.0244
-    },
-    {
-     "book": "Caesars",
-     "line": 7.5,
-     "price": -114,
-     "be": 0.5327,
-     "link": "https://sportsbook.caesars.com/us/{state}/bet/betslip?selectionIds=c6980816-c6d9-388c-b22c-d8586a43cac2",
-     "edge": -0.0083
-    },
-    {
-     "book": "DraftKings",
-     "line": 7.5,
-     "price": -118,
-     "be": 0.5413,
-     "link": "https://sportsbook.draftkings.com/?outcomes=0QA361487415%232251244020_13L42648Q1-1758311513Q20",
-     "edge": -0.0169
-    },
-    {
-     "book": "FanDuel",
-     "line": 7.5,
-     "price": -118,
-     "be": 0.5413,
-     "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.621055771&selectionId=27543228",
-     "edge": -0.0169
-    }
-   ],
-   "link": "https://sports.{state}.betmgm.com/en/sports?options=6:48514-4294132-6955577&type=Single"
   }
  ],
  "board": [
@@ -265,9 +204,9 @@
    "edge": 0.0244,
    "season": 6.6,
    "last5": 6.6,
-   "play": "bet",
-   "why": "",
-   "stake": 1.0
+   "play": "skip",
+   "why": "Removed by hand (price moved to -111)",
+   "stake": null
   },
   {
    "player": "Darius Garland",
@@ -933,7 +872,7 @@
    "proj": 6.4,
    "min": 23.4,
    "gp": 5,
-   "skip": "",
+   "skip": "removed by hand (price moved to -111)",
    "season": 6.6,
    "over": [
     -108,
@@ -18008,24 +17947,6 @@
     "price": -107,
     "book": "DraftKings",
     "edge": 0.0269,
-    "stake": 1.0,
-    "result": null,
-    "won": null,
-    "points": null,
-    "units": null,
-    "close": null,
-    "clv": null
-   },
-   {
-    "date": "2026-10-30",
-    "player": "Daniel Gafford",
-    "team": "DAL",
-    "opp": "HOU",
-    "side": "UNDER",
-    "line": 7.5,
-    "price": 100,
-    "book": "BetMGM",
-    "edge": 0.0244,
     "stake": 1.0,
     "result": null,
     "won": null,
