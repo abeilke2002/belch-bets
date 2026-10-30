@@ -18,6 +18,10 @@ on:
         default: picks
         type: choice
         options: [picks, close, results, announce, xauth]
+      override:
+        description: 'picks: fix a status and rerun today, e.g. Luka Doncic=Available (or =Out), comma-separated'
+        required: false
+        default: ''
       args:
         description: extra arguments for testing, e.g. --replay --date 2026-03-30 --no-deploy
         required: false
@@ -77,10 +81,13 @@ jobs:
       - name: Run the pipeline
         env:
           ANNOUNCE: ${{ inputs.args }}            # announce mode: the post's text (read by post_x.py, never put on a command line)
+          OVERRIDE: ${{ inputs.override }}        # picks: status overrides (read by daily_pipeline.py --set)
+          BACKUP: ${{ github.event_name == 'schedule' && '--if-missing' || '' }}   # GitHub's late backup never redoes a day
         run: |
           if [ "${{ steps.mode.outputs.mode }}" = announce ]; then python post_x.py --announce
           elif [ "${{ steps.mode.outputs.mode }}" = xauth ]; then python post_x.py --authorize
           elif [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20 ${{ inputs.args }}
+          elif [ "${{ steps.mode.outputs.mode }}" = picks ]; then python daily_pipeline.py picks $BACKUP ${{ inputs.args }}
           else python daily_pipeline.py ${{ steps.mode.outputs.mode }} ${{ inputs.args }}; fi
       - name: Save the day's data
         if: always()

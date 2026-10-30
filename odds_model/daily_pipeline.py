@@ -4,12 +4,14 @@
     python daily_pipeline.py close       # ~10-20 min before a bet's tip (the Worker starts it): closing lines
     python daily_pipeline.py results     # next morning: box scores -> features -> settle the bets
 
+    python daily_pipeline.py picks --set "Luka Doncic=Available"   # override a status (saved), rerun the day
     python daily_pipeline.py picks --replay --date 2026-03-19     # replay a past day from stored data
     python daily_pipeline.py picks --replay --start 2026-03-01 --end 2026-03-31
 
 The bets follow the backtested rule exactly:
-  absences   noon injury report: Out/Doubtful count fully, Questionable half; teams that have not filed
-             (noon, then previous evening) fall back to whoever missed their previous game
+  absences   noon injury report: Out/Doubtful count fully, Questionable half; if the noon report is missing or a
+             team has not filed, the previous evening's report; teams on neither fall back to whoever missed their
+             previous game. Manual overrides (data/overrides.json, --set) win over all of these
   skip       players on the report (Probable/Questionable/Doubtful) and players on a back-to-back;
              no bets at all from April 1 to the end of the regular season (rotations change, the books know first);
              a team's players in its first 3 games after a player leaves it midseason (roles reshuffle),
@@ -46,8 +48,14 @@ WEIGHT = {'Out': 1.0, 'Doubtful': 1.0, 'Questionable': 0.5}
 MIN_EDGE = 0.02
 STAKE = 1.0
 REPORT_DIR = DATA / 'injury_reports'
+OVERRIDES = DATA / 'overrides.json'
+STATUSES = {'Available', 'Probable', 'Questionable', 'Doubtful', 'Out'}
 LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'commence_time', 'side', 'line', 'price',
             'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units']
+
+
+class OverrideError(ValueError):
+    pass
 
 
 class Paths:
@@ -92,7 +100,54 @@ def tidy(rep, day):
     return rep
 
 
-def injury_weights(games, day, schedule, now, allow_fetch):
+def load_overrides(day):
+    try:
+        return json.loads(OVERRIDES.read_text()).get(str(day), {})
+    except FileNotFoundError:
+        return {}
+
+
+def parse_overrides(text):
+    """'Luka Doncic=Available, Jaxson Hayes=Out' -> {name: status}."""
+    new = {}
+    for part in filter(None, (x.strip() for x in text.replace(';', ',').split(','))):
+        name, _, st = part.partition('=')
+        st = {'Active': 'Available', 'Playing': 'Available'}.get(st.strip().title(), st.strip().title())
+        if not name.strip() or st not in STATUSES:
+            raise OverrideError(f'bad override {part!r}: use "Player Name=Status", status one of {sorted(STATUSES)}')
+        new[name.strip()] = st
+    return new
+
+
+def save_overrides(day, over):
+    """Kept so later reruns of the day (and the record) use them too."""
+    allx = json.loads(OVERRIDES.read_text()) if OVERRIDES.exists() else {}
+    allx[str(day)] = over
+    OVERRIDES.write_text(json.dumps(allx, indent=1, sort_keys=True) + '\n')
+
+
+def apply_overrides(weights, status, roster, teams, over):
+    """Your statuses replace the report's (or the previous-game guess) for those players."""
+    cand = roster[roster['TEAM_ID'].isin(teams)]
+    for name, st in over.items():
+        exact = cand[cand['key'] == norm(name)]
+        pid = exact['PLAYER_ID'].iloc[0] if len(exact) == 1 else roster_match(norm(name), cand)
+        if pid is None or pd.isna(pid):
+            raise OverrideError(f'override: no player named {name!r} on tonight\'s teams')
+        pid = int(pid)
+        status = status[status['PLAYER_ID'] != pid]
+        weights.pop(pid, None)
+        if st != 'Available':
+            r = cand[cand['PLAYER_ID'] == pid].iloc[0]
+            status = pd.concat([status, pd.DataFrame([{'TEAM_ID': r['TEAM_ID'], 'name': r['player_name'], 'status': st,
+                                                       'source': 'manual', 'PLAYER_ID': pid}])], ignore_index=True)
+            if st in WEIGHT:
+                weights[pid] = WEIGHT[st]
+        print(f'override: {cand.loc[cand["PLAYER_ID"] == pid, "player_name"].iloc[0]} -> {st}', flush=True)
+    return weights, status
+
+
+def injury_weights(games, day, schedule, now, allow_fetch, over=None):
     """{PLAYER_ID: weight}, per-player status table, and where each team's info came from."""
     season = season_of(day)
     cur = games[(games['season'] == season) & (games['GAME_DATE'] < pd.Timestamp(day))]
@@ -105,11 +160,12 @@ def injury_weights(games, day, schedule, now, allow_fetch):
     sources, rows = {}, []
     noon = noon_report(day, now, allow_fetch)
     reports = [('noon report', tidy(noon, day))] if noon is not None else []
-    if noon is not None and reports[0][1]['not_submitted'].any():
+    if noon is None or reports[0][1]['not_submitted'].any():
         prev = day - dt.timedelta(days=1)
         path = REPORT_DIR / f'{day}_prevday.csv'
-        for hour in (22, 20, 17):
-            r = fetch_report(dt.datetime(prev.year, prev.month, prev.day, hour, 0), path, allow_fetch)
+        last = dt.datetime(prev.year, prev.month, prev.day, 23, 45)
+        for back in range(0, 6 * 60 + 46, 15):         # latest first: 11:45 PM back to 5:00 PM
+            r = fetch_report(last - dt.timedelta(minutes=back), path, allow_fetch)
             if r is not None:
                 reports.append(('previous evening', tidy(r, day)))
                 break
@@ -139,6 +195,8 @@ def injury_weights(games, day, schedule, now, allow_fetch):
         prev_out = roster[roster['player_name'].isin(names) & roster['TEAM_ID'].isin(missing)]
         weights.update({p: 1.0 for p in prev_out['PLAYER_ID']})
         sources.update({t: 'previous game' for t in missing})
+    if over:
+        weights, status = apply_overrides(weights, status, roster, teams, over)
     return weights, status, sources, list(unmatched['name'])
 
 
@@ -259,7 +317,7 @@ def make_board(f, status, day, left=None):
     return b, list(b.index[bet.reindex(b.index)])
 
 
-def run_picks(day, paths, replay, now):
+def run_picks(day, paths, replay, now, extra=None):
     games = pd.read_parquet(DATA / 'player_games.parquet')
     schedule = load_schedule(games, day, from_history=replay)
     site = {'date': str(day), 'updated': now.strftime('%Y-%m-%d %I:%M %p ET'), 'status': 'ok', 'message': '',
@@ -268,7 +326,8 @@ def run_picks(day, paths, replay, now):
         site['message'] = 'No games today.'
         return site
     odds_note = 'replay: historical noon lines' if replay else pull_noon_odds()
-    weights, status, sources, unmatched = injury_weights(games, day, schedule, now, allow_fetch=not replay)
+    over = {} if replay else {**load_overrides(day), **(extra or {})}
+    weights, status, sources, unmatched = injury_weights(games, day, schedule, now, allow_fetch=not replay, over=over)
     om = joblib.load(DATA / 'models' / 'over_model.pkl')
     try:
         f = predict_day(games, day, schedule, out_weights=weights)
@@ -281,6 +340,7 @@ def run_picks(day, paths, replay, now):
     board, bet_idx = make_board(f, status, day, left_behind(games, day, None if replay else espn_rosters(day)))
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
+    site['slate']['overrides'] = over
     site['props'] = props_payload(board)
     site['model'] = model_payload(om)
     site['roster'] = roster_payload(games, day, schedule, weights, status, export_model(paths))
@@ -654,6 +714,9 @@ def main():
     ap.add_argument('--end')
     ap.add_argument('--window', type=int, default=10, help='close: minutes before tip')
     ap.add_argument('--no-deploy', action='store_true', help="don't upload to Cloudflare")
+    ap.add_argument('--set', default=os.environ.get('OVERRIDE', ''),
+                    help='picks: "Player=Status, ..." (Available/Probable/Questionable/Doubtful/Out), saved for the day')
+    ap.add_argument('--if-missing', action='store_true', help="picks: do nothing if today's picks already ran")
     args = ap.parse_args()
     paths = Paths(args.replay)
     stamp = dt.datetime.now(ET)
@@ -663,10 +726,17 @@ def main():
                 days = pd.date_range(args.start, args.end).date
             else:
                 days = [dt.date.fromisoformat(args.date) if args.date else stamp.date()]
+            prev = json.loads((paths.site / 'picks.json').read_text()) if (paths.site / 'picks.json').exists() else {}
+            if args.if_missing and prev.get('date') == str(days[0]) and prev.get('status') == 'ok':
+                print(f'{days[0]}: picks already ran at {prev.get("updated")}; backup run does nothing')
+                return
+            extra = parse_overrides(args.set)            # checked before anything runs
             games = pd.read_parquet(DATA / 'player_games.parquet') if args.replay else None
             for day in days:
                 now = dt.datetime(day.year, day.month, day.day, 12, 10, tzinfo=ET) if args.replay else stamp
-                site = run_picks(day, paths, args.replay, now)
+                site = run_picks(day, paths, args.replay, now, extra)
+                if extra and not args.replay:
+                    save_overrides(day, site['slate']['overrides'])
                 if args.replay:
                     settle(paths, games)            # replays know the result already
                 write_site(paths, site)
@@ -696,6 +766,9 @@ def main():
             if args.mode in ('picks', 'results'):        # once each per day, after the site is live; never fails the run
                 from post_x import post_picks, post_results
                 print(post_picks(site) if args.mode == 'picks' else post_results(site))
+    except OverrideError as e:                   # a typo in an override: say so, leave the site as it was
+        print(f'ERROR: {e}')
+        sys.exit(1)
     except Exception as e:
         traceback.print_exc()
         error_banner(paths, args.mode, f'{type(e).__name__}: {e}')
