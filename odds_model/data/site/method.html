@@ -179,17 +179,24 @@ section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
       <div class="grid2">
         <div class="card"><h3>Minutes</h3>
           <p class="muted">Predicts tonight's minutes from the player's season and recent minutes, how often he starts, rest,
-            games played, whether he's just back from an absence, and how many shots his missing teammates usually take.</p></div>
+            games played, whether he's just back from an absence, how many shots his missing teammates usually take,
+            which teammates are coming back tonight, and the game's point spread.</p></div>
         <div class="card"><h3>Points</h3>
           <p class="muted">Uses the predicted minutes plus season and recent scoring, shot and free-throw volume, last
-            season's average, starter role, rest, the opponent's defense against his position, who is out, and how many
-            players are left at his position to absorb the missing minutes.</p></div>
+            season's average, starter role, rest, the opponent's defense against his position, who is out on both teams,
+            how many players are left at his position to absorb the missing minutes, and the game's spread and total.</p></div>
       </div>
       <p><b>Injuries matter most.</b> At noon the model reads the NBA's official injury report. Players listed Out or
         Doubtful count as missing; Questionable players count as half missing, because they end up playing about half the
         time. When a teammate is out, the shots he usually takes are shared among the remaining players in proportion to
         how much each one normally shoots. The model is built so that a teammate sitting can only raise, never lower,
         another player's projection.</p>
+      <p><b>Game context.</b> Three more things the books price in, and so does the model. The <b>spread and total</b>
+        (from ESPN): a likely blowout means starters sit the fourth quarter, and a high total means more points to go
+        around. <b>Teammates coming back</b>: a player's recent averages run high while a teammate is out, so when that
+        teammate returns tonight his minutes come back out of everyone else's. <b>The opponent's injuries</b>, weighted like
+        our own team's, in total and at the player's position. Tested together on the last two seasons, these three made
+        the projections beat the market more in every retraining.</p>
       <p><b>Uncertainty.</b> Every projection comes with a typical miss (the "±" on the site), measured from how far past
         projections of the same size landed from the real result. A 25-point projection is less certain than a 6-point one,
         in points, and the ± reflects that.</p>
@@ -282,17 +289,17 @@ edge = P(side) − break-even(best price)</div>
         <table>
           <thead><tr><th>Season</th><th class="r">Bets</th><th class="r">Win rate</th><th class="r">Units</th></tr></thead>
           <tbody>
-            <tr><td>2023-24*</td><td class="r">230</td><td class="r">55.9%</td><td class="r pos">+26.1</td></tr>
-            <tr><td>2024-25</td><td class="r">643</td><td class="r">56.0%</td><td class="r pos">+46.1</td></tr>
-            <tr><td>2025-26</td><td class="r">296</td><td class="r">55.0%</td><td class="r pos">+16.4</td></tr>
-            <tr class="total"><td>2024-26</td><td class="r">939</td><td class="r">55.7%</td><td class="r pos">+62.5</td></tr>
+            <tr><td>2023-24*</td><td class="r">373</td><td class="r">56.3%</td><td class="r pos">+39.6</td></tr>
+            <tr><td>2024-25</td><td class="r">812</td><td class="r">57.5%</td><td class="r pos">+80.6</td></tr>
+            <tr><td>2025-26</td><td class="r">476</td><td class="r">54.8%</td><td class="r pos">+24.4</td></tr>
+            <tr class="total"><td>2024-26</td><td class="r">1,289</td><td class="r">56.5%</td><td class="r pos">+105.0</td></tr>
           </tbody>
         </table>
       </div>
       <p>*2023-24 is the oldest season with sportsbook lines, so its over/under model could only be trained on the two
         later seasons. It's shown for reference and left out of the total.</p>
-      <p>Over 2024-26 that's about +6.7% per bet, against a break-even win rate of about 52%. The statistical range runs
-        from roughly +1% to +12%. Because two of the rules came from these same seasons, expect the live result to land
+      <p>Over 2024-26 that's about +8.2% per bet, against a break-even win rate of about 52%. The statistical range runs
+        from roughly +3% to +13%, and every one of the 10 retrainings finished between +82 and +127 units. Because two of the rules came from these same seasons, expect the live result to land
         lower; treat it as promising, not proven. Expect cold spells: the worst losing stretch averaged about 13 units.</p>
       <p>The strongest evidence isn't the profit. Between noon and tip-off, the market moved toward the model's side about 61%
         of the time and away from it 39%, in every season and every retraining. That is very unlikely to be luck, and it means
