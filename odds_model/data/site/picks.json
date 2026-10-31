@@ -120,67 +120,6 @@
   },
   {
    "date": "2026-10-31",
-   "player": "Scoot Henderson",
-   "PLAYER_ID": 1630703,
-   "team": "POR",
-   "opponent": "UTA",
-   "event_id": "d47417c3b1a2cd427cce74c9d00f1046",
-   "commence_time": "2026-10-31T19:10:00Z",
-   "side": "UNDER",
-   "line": 13.5,
-   "price": -103,
-   "book": "Caesars",
-   "p_side": 0.5358,
-   "edge": 0.0284,
-   "stake": 1.0,
-   "opp": "UTA",
-   "mkt": 0.5185,
-   "proj": 10.1,
-   "sigma": 5.7,
-   "p": 0.5358,
-   "be": 0.5074,
-   "season": 7.5,
-   "last5": null,
-   "play": "bet",
-   "why": "",
-   "books": [
-    {
-     "book": "DraftKings",
-     "line": 14.5,
-     "price": -123,
-     "be": 0.5516,
-     "link": "https://sportsbook.draftkings.com/?outcomes=0QA384407414%232343426368_13L42648Q1-23932598Q20",
-     "edge": null
-    },
-    {
-     "book": "FanDuel",
-     "line": 14.5,
-     "price": -130,
-     "be": 0.5652,
-     "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.621299791&selectionId=62064857",
-     "edge": null
-    },
-    {
-     "book": "Caesars",
-     "line": 13.5,
-     "price": -103,
-     "be": 0.5074,
-     "link": "https://sportsbook.caesars.com/us/{state}/bet/betslip?selectionIds=14cf343f-2bcf-3bee-839a-dd2f0d6bf38f",
-     "edge": 0.0284
-    },
-    {
-     "book": "BetMGM",
-     "line": 13.5,
-     "price": -110,
-     "be": 0.5238,
-     "link": "https://sports.{state}.betmgm.com/en/sports?options=6:48534-4314324-6993107&type=Single",
-     "edge": 0.012
-    }
-   ],
-   "link": "https://sportsbook.caesars.com/us/{state}/bet/betslip?selectionIds=14cf343f-2bcf-3bee-839a-dd2f0d6bf38f"
-  },
-  {
-   "date": "2026-10-31",
    "player": "Zach Edey",
    "PLAYER_ID": 1641744,
    "team": "MEM",
@@ -290,9 +229,9 @@
    "edge": 0.0284,
    "season": 7.5,
    "last5": null,
-   "play": "bet",
-   "why": "",
-   "stake": 1.0
+   "play": "skip",
+   "why": "Removed by hand (line moved to 14.5 after noon)",
+   "stake": null
   },
   {
    "player": "Brandon Miller",
@@ -850,7 +789,7 @@
    "proj": 10.12,
    "min": 20.6,
    "gp": 4,
-   "skip": "",
+   "skip": "removed by hand (line moved to 14.5 after noon)",
    "season": 7.5,
    "over": [
     -120,
@@ -14152,24 +14091,6 @@
     "price": 110,
     "book": "Caesars",
     "edge": 0.0285,
-    "stake": 1.0,
-    "result": null,
-    "won": null,
-    "points": null,
-    "units": null,
-    "close": null,
-    "clv": null
-   },
-   {
-    "date": "2026-10-31",
-    "player": "Scoot Henderson",
-    "team": "POR",
-    "opp": "UTA",
-    "side": "UNDER",
-    "line": 13.5,
-    "price": -103,
-    "book": "Caesars",
-    "edge": 0.0284,
     "stake": 1.0,
     "result": null,
     "won": null,
