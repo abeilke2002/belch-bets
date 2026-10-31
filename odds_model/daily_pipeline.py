@@ -472,7 +472,7 @@ def props_payload(board):
     return out
 
 
-BROWSER_COLS = ['pts_season', 'min_season', 'fga_season', 'team_fga_pg', 'out_fga_season_avg', 'out_fga_5']
+BROWSER_COLS = ['pts_season', 'min_season', 'fga_season', 'team_fga_pg', 'out_fga_season_avg', 'out_fga_5', 'ret_mpg']
 
 
 def export_model(paths):

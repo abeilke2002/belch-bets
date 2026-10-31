@@ -7,7 +7,7 @@ Out-of-sample backtest of the site's rule: every prop not on the injury report o
 team in its first 3 games after a player left it midseason (daily_pipeline.left_behind). Projections ('half' injury policy, damping) and the classifier (market
 fixed + recent-weighted) are both trained only on earlier seasons. 2023-24 is left out: it has no earlier lines,
 so its classifier would have to be trained on later seasons. The live season comes from picks.json.
-SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robustness run, 2026-10-29, position-absence model); the History
+SPREAD: the same backtest retrained with 10 LightGBM seeds (scratch robust_v3 run, 2026-10-31, game-context model); the History
 tab shows seed 0, the production setting, and quotes the 10-seed average and range next to it.
 """
 import json
@@ -32,7 +32,7 @@ TEAM_ABBR = {'Hawks': 'ATL', 'Celtics': 'BOS', 'Nets': 'BKN', 'Hornets': 'CHA', 
 BOOK_NAMES = {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars'}
 PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
 MIN_EDGE, STAKE = 0.02, 1.0
-SPREAD = {'2025-26': (5.6, 3.4, 9.0, 16.4), '2024-25': (7.2, 3.4, 8.9, 46.1)}     # 10-seed avg/min/max %/bet, avg units
+SPREAD = {'2025-26': (5.1, 1.0, 7.8, 24.4), '2024-25': (9.9, 7.8, 11.7, 80.6)}     # 10-seed avg/min/max %/bet, avg units
 abbr = lambda full: next((a for nick, a in TEAM_ABBR.items() if str(full).endswith(nick)), str(full))
 
 

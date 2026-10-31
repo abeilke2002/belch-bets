@@ -24,6 +24,7 @@ from config import DATA
 from name_map import norm
 from parse_odds import american_to_prob
 from damping import damp, no_injury, predict_pair
+from game_context import add_tonight, returning
 from regression import sd_for
 
 ET = ZoneInfo('America/New_York')
@@ -156,6 +157,8 @@ def features_as_of(games, day, schedule, out_names, out_weights=None, keep_out=F
     f = f.merge(absences, on=['PLAYER_ID', 'GAME_ID'], how='left')
     f[['opp_pos_ratio', 'opp_total_ratio']] = lookup_defense(
         f[['OPP_ID', 'season', 'pos', 'GAME_DATE']], defense_history(hist))
+    # spread/total, teammates back from a reported absence, the opponent's absences (stored lines in replays)
+    f = add_tonight(f, games, day, schedule, replay=bool((games['GAME_DATE'] == pd.Timestamp(day)).any()))
     return f.copy() if keep_out else f[~f['is_out']].copy()
 
 
@@ -243,6 +246,8 @@ def with_absences(team, weights):
         t = finish_position(t.merge(position_absences(t.assign(mpg=t['min_season'], w=w.values)),
                                     on=['GAME_ID', 'TEAM_ID', 'pos'], how='left'))
         t.index = w.index
+    if 'ret_mpg' in t:                                # teammates back from an absence, from the same weights
+        t['ret_min'], t['ret_min_pos'] = returning(t, t['ret_mpg'].values, w.values, (t['ret_mpg'] > 0).values, 'pos')
     return t[w < 1]                                   # fully-out players aren't projected
 
 

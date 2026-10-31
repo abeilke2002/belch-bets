@@ -77,7 +77,9 @@ jobs:
       - run: pip install -q -r ../requirements.txt
       - name: Build features from the box scores
         if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce' && steps.mode.outputs.mode != 'xauth' && steps.mode.outputs.mode != 'remove'
-        run: python build_features.py > /dev/null
+        run: |
+          python build_features.py > /dev/null
+          python injury_reports.py > /dev/null       # data/noon_injuries.parquet: who was on each game's report (teammates returning)
       - name: Run the pipeline
         env:
           ANNOUNCE: ${{ inputs.args }}            # announce mode: the post's text (read by post_x.py, never put on a command line)

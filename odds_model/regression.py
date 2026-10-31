@@ -76,6 +76,10 @@ def fit(X, y):
 
 def load_rows():
     df = pd.read_parquet(DATA / 'player_games.parquet')
+    ctx = DATA / 'game_context.parquet'                 # spread/total, teammates returning, opponent absences
+    if ctx.exists():
+        df = df.drop(columns=[c for c in pd.read_parquet(ctx).columns if c not in ('PLAYER_ID', 'GAME_ID')], errors='ignore') \
+               .merge(pd.read_parquet(ctx), on=['PLAYER_ID', 'GAME_ID'], how='left')
     return df[df['played'] & (df['gp'] >= 1)].reset_index(drop=True)
 
 

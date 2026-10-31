@@ -63,13 +63,23 @@
     return by;
   }
 
-  // A team's rows with the teammates-out totals rebuilt from {id: weight}; players at weight 1 are not projected
+  // Teammates back from a reported absence (game_context.returning): each one's minutes x (1 - weight), for the team
+  // and at the player's position, never counting the player himself. ret_mpg is 0 for everyone else.
+  function returning(team, w) {
+    const r = p => (isMissing(p.x.ret_mpg) ? 0 : p.x.ret_mpg) * (1 - w(p));
+    const tot = team.reduce((s, p) => s + r(p), 0), byPos = {};
+    for (const p of team) if (!isMissing(p.x.pos_code)) byPos[p.x.pos_code] = (byPos[p.x.pos_code] || 0) + r(p);
+    return p => [Math.max(0, tot - r(p)), isMissing(p.x.pos_code) ? 0 : Math.max(0, byPos[p.x.pos_code] - r(p))];
+  }
+
+  // A team's rows with the teammates-out totals rebuilt from {id: weight}; players at weight 1 are not projected.
+  // The opponent's absences stay as reported (opp_out_*).
   function withAbsences(team, weights) {
     const w = p => weights[p.id] ?? 0;
     const sum = col => team.reduce((s, p) => s + (isMissing(p.x[col]) ? 0 : p.x[col] * w(p)), 0);
     const tot = { out_ppg: sum('pts_season'), out_min: sum('min_season'), out_fga: sum('fga_season'),
                   n_out: team.reduce((s, p) => s + w(p), 0) };
-    const byPos = positionAbsences(team, w);
+    const byPos = positionAbsences(team, w), ret = returning(team, w);
     return team.filter(p => w(p) < 1).map(p => {
       const r = { ...p.x, ...tot };
       r.out_fga_share = r.out_fga / r.team_fga_pg;
@@ -78,6 +88,7 @@
       r.n_active_pos = Math.max(1, g ? g.act : 1);
       r.n_rot_pos = Math.max(1, g ? g.rot : 1);
       r.pos_vacancy = r.out_min_pos / r.n_active_pos;
+      if (!isMissing(p.x.ret_mpg)) [r.ret_min, r.ret_min_pos] = ret(p);
       return { id: p.id, row: addRedistribution(r) };
     });
   }

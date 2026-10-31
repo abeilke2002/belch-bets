@@ -2,10 +2,10 @@
 
 | test season | trained on | projection weight | log loss: market / model | daily picks |
 |---|---|---|---|---|
-| 2024-25 | 2023-24 | 1.036 | 0.6921 / 0.6924 | 152 |
-| 2025-26 | 2023-24 + 2024-25 | 0.713 | 0.6921 / 0.6918 | 137 |
-| 2023-24 | 2024-25 + 2025-26 | 0.292 | 0.6924 / 0.6915 | 107 |
+| 2024-25 | 2023-24 | 0.519 | 0.6921 / 0.6921 | 154 |
+| 2025-26 | 2023-24 + 2024-25 | 0.724 | 0.6921 / 0.6916 | 142 |
+| 2023-24 | 2024-25 + 2025-26 | 0.375 | 0.6924 / 0.6912 | 130 |
 
-Daily picks: 396 bets, predicted 56.1%, won 56.1%, +39.1 units with edge-sized stakes
+Daily picks: 426 bets, predicted 56.3%, won 53.1%, +12.9 units with edge-sized stakes
 
-Live model: z = market log-odds -0.0362 -0.0183 x gap +0.3466 x gap/sigma; stake scale 1u = 3.23% edge; a bet on 61% of days
+Live model: z = market log-odds -0.0431 -0.0161 x gap +0.3891 x gap/sigma; stake scale 1u = 3.66% edge; a bet on 81% of days

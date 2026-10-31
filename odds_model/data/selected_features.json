@@ -17,7 +17,16 @@
     "out_min_pos",
     "n_active_pos",
     "pos_vacancy",
-    "pos_code"
+    "pos_code",
+    "team_spread",
+    "abs_spread",
+    "total",
+    "team_implied",
+    "ret_min",
+    "ret_min_pos",
+    "opp_out_min",
+    "opp_out_ppg",
+    "opp_out_min_pos"
   ],
   "points": [
     "pts_season",
@@ -46,7 +55,16 @@
     "out_min_pos",
     "n_active_pos",
     "pos_vacancy",
-    "pos_code"
+    "pos_code",
+    "team_spread",
+    "abs_spread",
+    "total",
+    "team_implied",
+    "ret_min",
+    "ret_min_pos",
+    "opp_out_min",
+    "opp_out_ppg",
+    "opp_out_min_pos"
   ],
   "minutes_groups": [
     "minutes averages",
@@ -56,7 +74,10 @@
     "scoring level",
     "return from absence",
     "usage freed up",
-    "position absences"
+    "position absences",
+    "game lines",
+    "teammates returning",
+    "opponent absences"
   ],
   "points_groups": [
     "season averages",
@@ -68,7 +89,10 @@
     "teammates out",
     "opponent defense",
     "shot redistribution (new absences)",
-    "position absences"
+    "position absences",
+    "game lines",
+    "teammates returning",
+    "opponent absences"
   ],
   "classifier": [
     "line",
