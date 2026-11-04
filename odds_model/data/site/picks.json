@@ -3,69 +3,7 @@
  "updated": "2026-11-04 02:41 PM ET",
  "status": "ok",
  "message": "",
- "picks": [
-  {
-   "date": "2026-11-04",
-   "player": "Derrick White",
-   "PLAYER_ID": 1628401,
-   "team": "BOS",
-   "opponent": "MIL",
-   "event_id": "1cb12166c3eda270d40cc65b9b34459a",
-   "commence_time": "2026-11-05T00:40:00Z",
-   "side": "UNDER",
-   "line": 16.5,
-   "price": -112,
-   "book": "DraftKings",
-   "p_side": 0.5494,
-   "edge": 0.0211,
-   "stake": 1.0,
-   "opp": "MIL",
-   "mkt": 0.484,
-   "proj": 14.4,
-   "sigma": 6.6,
-   "p": 0.5494,
-   "be": 0.5283,
-   "season": 11.1,
-   "last5": 9.8,
-   "play": "bet",
-   "why": "",
-   "books": [
-    {
-     "book": "BetMGM",
-     "line": 15.5,
-     "price": -115,
-     "be": 0.5349,
-     "link": "https://sports.{state}.betmgm.com/en/sports?options=6:48993-4398039-7157572&type=Single",
-     "edge": null
-    },
-    {
-     "book": "DraftKings",
-     "line": 16.5,
-     "price": -112,
-     "be": 0.5283,
-     "link": "https://sportsbook.draftkings.com/?outcomes=0QA385705430%232349927899_13L42648Q1351768104Q20",
-     "edge": 0.0211
-    },
-    {
-     "book": "Caesars",
-     "line": 16.5,
-     "price": -124,
-     "be": 0.5536,
-     "link": "https://sportsbook.caesars.com/us/{state}/bet/betslip?selectionIds=cffc6f46-673e-32d3-b390-5a7f281b6afd",
-     "edge": -0.0041
-    },
-    {
-     "book": "FanDuel",
-     "line": 16.5,
-     "price": -130,
-     "be": 0.5652,
-     "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.622490624&selectionId=22613512",
-     "edge": -0.0158
-    }
-   ],
-   "link": "https://sportsbook.draftkings.com/?outcomes=0QA385705430%232349927899_13L42648Q1351768104Q20"
-  }
- ],
+ "picks": [],
  "board": [
   {
    "player": "Derrick White",
@@ -83,9 +21,9 @@
    "edge": 0.0211,
    "season": 11.1,
    "last5": 9.8,
-   "play": "bet",
-   "why": "",
-   "stake": 1.0
+   "play": "skip",
+   "why": "Removed by hand (line moved to 17.5 after noon)",
+   "stake": null
   },
   {
    "player": "Ivica Zubac",
@@ -897,7 +835,7 @@
    "proj": 14.37,
    "min": 29.4,
    "gp": 7,
-   "skip": "",
+   "skip": "removed by hand (line moved to 17.5 after noon)",
    "season": 11.1,
    "over": [
     -102,
@@ -29456,24 +29394,6 @@
    },
    {
     "date": "2026-10-28",
-    "player": "Clint Capela",
-    "team": "HOU",
-    "opp": "MIL",
-    "side": "UNDER",
-    "line": 7.5,
-    "price": -119,
-    "book": "DraftKings",
-    "edge": 0.0971,
-    "stake": 1.0,
-    "result": "loss",
-    "won": false,
-    "points": 10.0,
-    "units": -1.0,
-    "close": null,
-    "clv": null
-   },
-   {
-    "date": "2026-10-28",
     "player": "Kobe Sanders",
     "team": "LAC",
     "opp": "LAL",
@@ -29491,22 +29411,22 @@
     "clv": null
    },
    {
-    "date": "2026-10-30",
-    "player": "Isaiah Jackson",
-    "team": "LAC",
-    "opp": "MIN",
+    "date": "2026-10-28",
+    "player": "Clint Capela",
+    "team": "HOU",
+    "opp": "MIL",
     "side": "UNDER",
-    "line": 8.5,
-    "price": -107,
+    "line": 7.5,
+    "price": -119,
     "book": "DraftKings",
-    "edge": 0.0269,
+    "edge": 0.0971,
     "stake": 1.0,
     "result": "loss",
     "won": false,
     "points": 10.0,
     "units": -1.0,
-    "close": 8.5,
-    "clv": 0.0
+    "close": null,
+    "clv": null
    },
    {
     "date": "2026-10-30",
@@ -29524,6 +29444,24 @@
     "points": 37.0,
     "units": -1.0,
     "close": 34.5,
+    "clv": 0.0
+   },
+   {
+    "date": "2026-10-30",
+    "player": "Isaiah Jackson",
+    "team": "LAC",
+    "opp": "MIN",
+    "side": "UNDER",
+    "line": 8.5,
+    "price": -107,
+    "book": "DraftKings",
+    "edge": 0.0269,
+    "stake": 1.0,
+    "result": "loss",
+    "won": false,
+    "points": 10.0,
+    "units": -1.0,
+    "close": 8.5,
     "clv": 0.0
    },
    {
@@ -29651,24 +29589,6 @@
     "units": 0.8474576271,
     "close": 12.5,
     "clv": 0.0
-   },
-   {
-    "date": "2026-11-04",
-    "player": "Derrick White",
-    "team": "BOS",
-    "opp": "MIL",
-    "side": "UNDER",
-    "line": 16.5,
-    "price": -112,
-    "book": "DraftKings",
-    "edge": 0.0211,
-    "stake": 1.0,
-    "result": null,
-    "won": null,
-    "points": null,
-    "units": null,
-    "close": null,
-    "clv": null
    }
   ]
  }
