@@ -140,10 +140,15 @@
         if (p.spos) { const g = (byPos[p.spos] ??= { reb: 0, ast: 0 }); g[k] += v; }
       }
     }
+    // position absences and teammates returning: the same rows the minutes and points models get
+    const base = Object.fromEntries(withAbsences(team, weights).map(o => [o.id, o.row]));
     const rows = [];
     for (const p of team) {
       if (w(p) >= 1 || !p.sx || !pts[p.id]) continue;
-      const r = { ...p.sx, pred_minutes: pts[p.id].minutes, out_min: outMin, n_out: nOut };
+      const b = base[p.id] || {};
+      const r = { ...p.sx, pred_minutes: pts[p.id].minutes, out_min: outMin, n_out: nOut,
+                  out_min_pos: b.out_min_pos, n_active_pos: b.n_active_pos, pos_vacancy: b.pos_vacancy,
+                  ret_min: b.ret_min, ret_min_pos: b.ret_min_pos };
       for (const k of ['reb', 'ast']) {
         r['out_' + k] = tot[k];
         r['out_' + k + '_pos'] = p.spos && byPos[p.spos] ? byPos[p.spos][k] : 0;

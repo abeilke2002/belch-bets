@@ -3,6 +3,8 @@
 The backtest (stat_backtest.py, no-hindsight version) validated these rules, 2023-26 walk-forward:
   rebounds  unders only     every edge >= 2%: 3,964 bets, 55.4%, +308.6u, +7.8% ROI (each season positive)
   assists   both sides      every edge >= 2%: 1,007 bets, 58.5%, +59.6u, +5.9% ROI
+            with the opponent's absences, returning teammates and position absences added (--tag _noon), the site's
+            rule over 2023-26: 950 bets, +75.0u, +7.9% (was 883, +46.4u); rebounds didn't gain, so it keeps the old set
 Tonight's inputs come from the backtest's own functions (stat_backtest.player_stat_features, attach_out,
 add_new_absence) run on history + tonight's rows, so live and backtest features can't drift apart.
 
@@ -23,12 +25,14 @@ from parse_odds import american_to_prob
 from regression import fit, load_rows, minutes_for_season, selected
 
 MODEL_PATH = DATA / 'models' / 'stat_models.pkl'
-MARKETS = {'rebounds': {'key': 'reb', 'sides': ('UNDER',), 'clf': ['dlogit']},
-           'assists': {'key': 'ast', 'sides': ('OVER', 'UNDER'), 'clf': ['gap', 'gapz']}}
+# full: every feature, including the opponent's absences, teammates returning and position absences (all known at
+# noon; stat_backtest --tag _noon). Kept for assists (+28.6u over three seasons); rebounds did better without them.
+MARKETS = {'rebounds': {'key': 'reb', 'sides': ('UNDER',), 'clf': ['dlogit'], 'full': False, 'preds': '_nohind'},
+           'assists': {'key': 'ast', 'sides': ('OVER', 'UNDER'), 'clf': ['gap', 'gapz'], 'full': True, 'preds': '_noon'}}
 
 
-def features_for(key):
-    return [f for f in SB.STAT_FEATURES[key] + SB.COMMON if f not in SB.HINDSIGHT]
+def features_for(key, full=False):
+    return [f for f in SB.STAT_FEATURES[key] + SB.COMMON if full or f not in SB.HINDSIGHT]
 
 
 # ---------------------------------------------------------------- training
@@ -37,21 +41,24 @@ def train():
     SB.NO_HINDSIGHT = True
     print('building history...', flush=True)
     hind, _ = SB.build(list(MARKETS), noon_inputs=False)
-    mf = [f for f in selected('minutes') if f not in SB.HINDSIGHT]
     hind = hind.reset_index(drop=True)
-    hind['pred_minutes'] = minutes_for_season(hind, '9999-99', mf)    # every season predicted by the other seasons
+    mins = {}                                                         # every season predicted by the other seasons
+    for full in {cfg['full'] for cfg in MARKETS.values()}:
+        mf = [f for f in selected('minutes') if full or f not in SB.HINDSIGHT]
+        mins[full] = minutes_for_season(hind, '9999-99', mf)
     last = sorted(hind['season'].unique())[-1]
     full = sorted(s for s in hind['season'].unique() if (hind['season'] == s).sum() > 20000)[-1]   # last complete season
     out = {'trained_through': str(hind['GAME_DATE'].max().date())}
     for market, cfg in MARKETS.items():
-        key, feats = cfg['key'], features_for(cfg['key'])
+        key, feats = cfg['key'], features_for(cfg['key'], cfg['full'])
+        hind['pred_minutes'] = mins[cfg['full']]
         model = SB.fit_stat(hind[feats], hind[key])
         early = hind['season'] < full                                # dispersion: last full season, unseen model
         pm = SB.fit_stat(hind.loc[early, feats], hind.loc[early, key])
         pv = hind[hind['season'] == full]
         edges, rs = SB.dispersion_table(np.maximum(pm.predict(pv[feats]), 0.05), pv[key].values)
         # P(over) weights: market log-odds at weight 1 + the model, recency-weighted over the backtest's props
-        props = SB.props(market, pd.read_pickle(DATA / f'stat_preds_{market}_nohind.pkl'), key)
+        props = SB.props(market, pd.read_pickle(DATA / f"stat_preds_{market}{cfg['preds']}.pkl"), key)
         _, b = SB.fit_offset(props, cfg['clf'])
         out[market] = {'model': model, 'features': feats, 'edges': list(edges), 'rs': list(rs), 'clf_cols': cfg['clf'],
                        'clf_b': [float(x) for x in b], 'sides': cfg['sides']}

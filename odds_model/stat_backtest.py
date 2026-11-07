@@ -25,7 +25,7 @@ from scipy.special import gammaln
 from scipy.stats import nbinom
 from sklearn.metrics import log_loss
 
-from build_features import add_redistribution, inferred_absences, load_positions
+from build_features import add_redistribution, finish_position, inferred_absences, load_positions, position_absences
 from classifier import logit, season_weights, sigmoid
 from config import BOOKS, CSV_DIR, DATA, REPORTS
 from noon_backtest import season_averages
@@ -139,6 +139,28 @@ def add_new_absence(df, usual):
     return df
 
 
+POSITION = ['out_min_pos', 'n_active_pos', 'n_rot_pos', 'pos_vacancy']
+
+
+def noon_positions(df, g, rows):
+    """out_min_pos / n_active_pos / pos_vacancy from the noon report instead of who actually sat: everyone on the
+    team-game (dressed, absent or listed) at his noon weight (0 if not listed), season-to-date mpg from earlier games.
+    The same inputs predict_today builds live (position_absences over the roster at out_w)."""
+    played = g[g['played']]
+    mpg = played[['PLAYER_ID', 'season', 'GAME_DATE', 'MINUTES']].sort_values(['PLAYER_ID', 'GAME_DATE']).copy()
+    mpg['mpg'] = mpg.groupby(['PLAYER_ID', 'season'])['MINUTES'].transform(lambda x: x.expanding().mean())
+    mpg = mpg.drop(columns='MINUTES').sort_values('GAME_DATE')
+    cols = ['PLAYER_ID', 'season', 'GAME_ID', 'TEAM_ID', 'GAME_DATE']
+    rost = pd.concat([g.loc[g['played'] | g['cd_dnp'], cols], inferred_absences(g)[cols], rows[cols]]) \
+             .drop_duplicates(['GAME_ID', 'PLAYER_ID'])
+    w = rows.groupby(['GAME_ID', 'PLAYER_ID'])['weight'].max()
+    rost['w'] = pd.Series(list(zip(rost['GAME_ID'], rost['PLAYER_ID']))).map(w).fillna(0.0).values
+    rost = pd.merge_asof(rost.sort_values('GAME_DATE'), mpg, on='GAME_DATE', by=['PLAYER_ID', 'season'],
+                         allow_exact_matches=False).merge(load_positions(), on='PLAYER_ID', how='left')
+    df = df.drop(columns=[c for c in POSITION if c in df]).merge(position_absences(rost), on=['GAME_ID', 'TEAM_ID', 'pos'], how='left')
+    return finish_position(df)
+
+
 def build(stat_list, noon_inputs=True):
     g = pd.read_parquet(DATA / 'player_games.parquet')
     played_all = g[g['played']].merge(box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='left')
@@ -173,6 +195,7 @@ def build(stat_list, noon_inputs=True):
     noon = noon.drop(columns=['out_ppg', 'out_min', 'out_fga', 'n_out']).merge(wt, on=['GAME_ID', 'TEAM_ID'], how='left')
     noon[['out_ppg', 'out_min', 'out_fga', 'n_out']] = noon[['out_ppg', 'out_min', 'out_fga', 'n_out']].fillna(0)
     noon['out_fga_share'] = noon['out_fga'] / noon['team_fga_pg']
+    noon = noon_positions(noon, g, rows)                       # position absences from the report too
     noon = add_new_absence(add_redistribution(noon), usual)
     return hind, noon
 
@@ -187,8 +210,10 @@ STAT_FEATURES = {
 }
 COMMON = ['pred_minutes', 'min_season', 'min_5', 'start_rate', 'started_last', 'rest_days', 'gp', 'pace', 'opp_pace',
           'out_min', 'n_out', 'out_min_pos', 'pos_vacancy', 'pos_code', 'team_spread', 'abs_spread', 'total', 'team_implied',
-          'opp_out_min']
-# Built from who actually sat (game_context.py), not the noon report: only usable live, leaks in a backtest
+          'opp_out_min', 'opp_out_ppg', 'opp_out_min_pos', 'ret_min', 'ret_min_pos', 'n_active_pos']
+# --no-hindsight (the first live version) dropped these. Only the three position ones were ever built from who
+# actually sat, and noon_positions now rebuilds them from the noon report for test rows; ret_* and opp_out_* come
+# from game_context.py, which builds them from the noon reports. So the full set is leak-free (--tag _noon).
 HINDSIGHT = ['out_min_pos', 'n_active_pos', 'pos_vacancy', 'ret_min', 'ret_min_pos', 'opp_out_min', 'opp_out_ppg',
              'opp_out_min_pos']
 NO_HINDSIGHT = False

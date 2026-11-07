@@ -533,7 +533,8 @@ def check_browser_model(paths, site, f):
 
 # Built in the browser from the lineup (model.js statTeamProjections); everything else comes from the roster
 STAT_LINEUP = {'pred_minutes', 'out_min', 'n_out', 'out_reb', 'out_ast', 'out_reb_pos', 'out_ast_pos', 'new_out_reb',
-               'new_out_ast', 'new_out_reb_pos', 'new_out_ast_pos', 'exp_extra_reb', 'exp_extra_ast'}
+               'new_out_ast', 'new_out_reb_pos', 'new_out_ast_pos', 'exp_extra_reb', 'exp_extra_ast',
+               'out_min_pos', 'n_active_pos', 'pos_vacancy', 'ret_min', 'ret_min_pos'}   # last five: model.js withAbsences
 STAT_HELPERS = ['reb_out_avg', 'ast_out_avg', 'out_reb_usual', 'out_ast_usual', 'out_reb_pos_usual', 'out_ast_pos_usual',
                 'reb_season', 'ast_season', 'team_reb', 'team_ast', 'reb_5', 'ast_5']
 

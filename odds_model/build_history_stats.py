@@ -5,7 +5,7 @@
 Same rule and seasons as build_history.py (points), so the home page compares like with like: every prop not on the
 injury report or a back-to-back with an edge >= 2%, flat 1u, at the best noon price, nothing from April 1 on, nothing
 on a team in its first 3 games after a player left it midseason. Rebounds take unders only (the backtest's overs lost).
-Projections (stat_backtest.py --no-hindsight) are trained only on earlier seasons; the over/under weights for a season
+Projections (stat_backtest.py; the version stat_models.MARKETS names) are trained only on earlier seasons; the over/under weights for a season
 only on the seasons before it (2024-25: 2023-24; 2025-26: 2023-24 and 2024-25).
 """
 import json
@@ -15,6 +15,7 @@ import pandas as pd
 
 import build_history as BH
 import stat_backtest as SB
+import stat_models as SM
 from config import DATA, ROOT
 from parse_odds import american_to_prob
 
@@ -56,7 +57,7 @@ def main():
     left = BH.left_behind_rows()
     names = pd.read_parquet(DATA / 'player_games.parquet', columns=['GAME_ID', 'PLAYER_ID', 'player_name', 'teamName'])
     for market, (key, cols, sides) in MARKETS.items():
-        d = SB.props(market, pd.read_pickle(DATA / f'stat_preds_{market}_nohind.pkl'), key)
+        d = SB.props(market, pd.read_pickle(DATA / f"stat_preds_{market}{SM.MARKETS[market]['preds']}.pkl"), key)
         d = d.merge(names, on=['GAME_ID', 'PLAYER_ID'], how='left')
         seasons = []
         for test, train in PLAN.items():

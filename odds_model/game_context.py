@@ -153,7 +153,7 @@ def add_tonight(f, games, day, schedule, replay=False):
     rows = games[(games['season'] == season) & (games['GAME_DATE'] < pd.Timestamp(day))]
     last = rows.drop_duplicates(['TEAM_ID', 'GAME_ID']).sort_values('GAME_DATE').groupby('TEAM_ID')['GAME_ID'].last()
     ab = inferred_absences(rows)
-    ab = ab[ab['GAME_ID'].isin(set(last.values))]
+    ab = ab[ab['GAME_ID'] == ab['TEAM_ID'].map(last)]       # his own team's last game (not any team's)
     try:
         rep = pd.read_parquet(DATA / 'noon_injuries.parquet', columns=['GAME_ID', 'PLAYER_ID'])
         listed = set(zip(rep['GAME_ID'], rep['PLAYER_ID']))
