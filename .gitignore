@@ -22,6 +22,10 @@ odds_model/data/*
 !odds_model/data/selected_features.json
 !odds_model/data/odds_lines.parquet
 !odds_model/data/odds_books.parquet
+!odds_model/data/odds_lines_rebounds.parquet
+!odds_model/data/odds_lines_assists.parquet
+!odds_model/data/odds_books_rebounds.parquet
+!odds_model/data/odds_books_assists.parquet
 # injury reports: this season on (older ones only matter to the backtests on the Mac)
 odds_model/data/injury_reports/202[345]-*
 odds_model/data/injury_reports/2026-0*

@@ -17,6 +17,8 @@ API_KEY = os.environ.get('ODDS_API_KEY') or (_KEY_FILE.read_text().strip() if _K
 SPORT = 'basketball_nba'
 REGIONS = 'us'
 MARKET = 'player_points'
+# Live snapshots (noon and close) ask for all of these in one request: 1 credit per market per game
+LIVE_MARKETS = ['player_points', 'player_rebounds', 'player_assists']
 # Books used for training, the consensus and bets (Caesars = williamhill_us). Raw pulls keep every book.
 BOOKS = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us']
 CREDIT_FLOOR = 2_000             # stop pulling when remaining credits fall below this

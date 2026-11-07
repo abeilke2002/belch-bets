@@ -14,7 +14,7 @@ import subprocess
 import sys
 from zoneinfo import ZoneInfo
 
-from config import LIVE, MARKET, REGIONS, ROOT, SPORT
+from config import LIVE, LIVE_MARKETS, MARKET, REGIONS, ROOT, SPORT
 from odds_api import CreditLimit, OddsAPI
 
 ET = ZoneInfo('America/New_York')
@@ -31,8 +31,8 @@ def snapshot(api, events, snap):
         out = LIVE / f"{e['id']}_{snap}.json"
         if out.exists():
             continue
-        data = api.get(f"/sports/{SPORT}/events/{e['id']}/odds", expected_cost=len(REGIONS.split(',')),
-                       regions=REGIONS, markets=MARKET, oddsFormat='american', includeLinks='true')
+        data = api.get(f"/sports/{SPORT}/events/{e['id']}/odds", expected_cost=len(REGIONS.split(',')) * len(LIVE_MARKETS),
+                       regions=REGIONS, markets=','.join(LIVE_MARKETS), oddsFormat='american', includeLinks='true')
         now = dt.datetime.now(dt.timezone.utc)
         day = dt.datetime.fromisoformat(e['commence_time'].replace('Z', '+00:00')).astimezone(ET).date()
         out.write_text(json.dumps({'timestamp': now.strftime('%Y-%m-%dT%H:%M:%SZ'), 'data': data,

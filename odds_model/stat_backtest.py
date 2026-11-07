@@ -56,25 +56,25 @@ def box_stats():
 
 
 def player_stat_features(d):
-    """Prior-games-only averages per player-season (shift(1)), plus last season's per-game average."""
-    d = d.sort_values(['PLAYER_ID', 'GAME_DATE']).copy()
+    """Prior-games-only averages per player-season (shift(1)), plus last season's per-game average.
+    All rolling features are computed on one sorted, freshly indexed frame before any merge (a merge renumbers rows,
+    which would misalign groupby results computed earlier)."""
+    d = d.sort_values(['PLAYER_ID', 'GAME_DATE']).reset_index(drop=True)
     g = d.groupby(['PLAYER_ID', 'season'])
+    mins = g['MINUTES'].transform(lambda x: x.shift(1).cumsum())
+    m10 = g['MINUTES'].transform(lambda x: x.shift(1).rolling(10, min_periods=1).sum())
     for s in ['reb', 'ast', 'oreb']:
         d[f'{s}_season'] = g[s].transform(lambda x: x.shift(1).expanding().mean())
         for w in (10, 5, 3):
             d[f'{s}_{w}'] = g[s].transform(lambda x, w=w: x.shift(1).rolling(w, min_periods=1).mean())
-        tot = g[s].transform(lambda x: x.shift(1).cumsum())
-        mins = g['MINUTES'].transform(lambda x: x.shift(1).cumsum())
-        d[f'{s}_pm_season'] = tot / mins.where(mins > 0)
-        t10 = g[s].transform(lambda x: x.shift(1).rolling(10, min_periods=1).sum())
-        m10 = g['MINUTES'].transform(lambda x: x.shift(1).rolling(10, min_periods=1).sum())
-        d[f'{s}_pm_10'] = t10 / m10.where(m10 > 0)
-        prev = d.groupby(['PLAYER_ID', 'season'])[s].mean().rename(f'{s}_prev').reset_index()
-        order = sorted(d['season'].unique())
-        prev['season'] = prev['season'].map(lambda x: order[order.index(x) + 1] if order.index(x) + 1 < len(order) else None)
-        d = d.merge(prev.dropna(subset=['season']), on=['PLAYER_ID', 'season'], how='left')
+        d[f'{s}_pm_season'] = g[s].transform(lambda x: x.shift(1).cumsum()) / mins.where(mins > 0)
+        d[f'{s}_pm_10'] = g[s].transform(lambda x: x.shift(1).rolling(10, min_periods=1).sum()) / m10.where(m10 > 0)
     d['oreb_share'] = d['oreb_season'] / d['reb_season'].where(d['reb_season'] > 0)
-    return d
+    order = sorted(d['season'].unique())
+    nxt = {a: b for a, b in zip(order, order[1:])}
+    prev = d.groupby(['PLAYER_ID', 'season'])[['reb', 'ast', 'oreb']].mean().add_suffix('_prev').reset_index()
+    prev['season'] = prev['season'].map(nxt)
+    return d.merge(prev.dropna(subset=['season']), on=['PLAYER_ID', 'season'], how='left')
 
 
 def team_context(played):
@@ -139,7 +139,7 @@ def add_new_absence(df, usual):
     return df
 
 
-def build(stat_list):
+def build(stat_list, noon_inputs=True):
     g = pd.read_parquet(DATA / 'player_games.parquet')
     played_all = g[g['played']].merge(box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='left')
     played_all = played_all.dropna(subset=['reb', 'ast'])         # 2026-27 (ESPN) rows have no rebounds/assists yet
@@ -162,6 +162,8 @@ def build(stat_list):
     for c in ['out_reb', 'out_ast', 'out_reb_pos', 'out_ast_pos']:
         usual[f'{c}_usual'] = gg[c].transform(lambda x: x.shift(1).expanding().mean())
     hind = add_new_absence(df, usual)
+    if not noon_inputs:
+        return hind, None
 
     # noon inputs: the noon report (Questionable at half) for teammates-out, everything else unchanged
     rep = pd.read_parquet(DATA / 'noon_injuries.parquet')

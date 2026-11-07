@@ -19,6 +19,8 @@ The bets follow the backtested rule exactly:
              a team's players in its first 3 games after a player leaves it midseason (roles reshuffle),
              and a traded player until he has played for his new team
   bet        every remaining prop with an edge >= 2%, at the best price among config.BOOKS
+  markets    points (both sides), rebounds (unders only), assists (both sides): stat_models.py, backtested
+             2023-26 at +7.2% (rebounds unders) and +5.4% (assists) ROI with the same skips
   stake      flat 1u each (the stake the multi-seed backtest validated; size the unit for ~3 bets a night)
 Outputs: data/site/picks.json (the website reads this), data/bet_log.csv. Replays write under data/replay/.
 Credits: about 1 per game at noon + 1 at close for each game with a bet. Failures put an error banner in
@@ -39,7 +41,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from config import BOOKS, DATA, LIVE, ROOT, SPORT
+from config import BOOKS, DATA, LIVE, LIVE_MARKETS, ROOT, SPORT
 from injury_reports import flip_name
 from name_map import norm, roster_match
 from parse_odds import american_to_decimal, american_to_prob
@@ -54,7 +56,8 @@ OVERRIDES = DATA / 'live' / 'overrides.json'
 REMOVED = DATA / 'live' / 'removed.json'              # {date: {player: why}}: bets taken off by hand (price gone)
 STATUSES = {'Available', 'Probable', 'Questionable', 'Doubtful', 'Out'}
 LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'commence_time', 'side', 'line', 'price',
-            'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units']
+            'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units', 'market']
+STAT_MARKETS = {'rebounds': 'reb', 'assists': 'ast'}          # besides points; 'points' in the log = the stat's actual value
 
 
 class OverrideError(ValueError):
@@ -258,9 +261,13 @@ def pull_noon_odds():
 
 
 def parse_live():
+    """data/live/odds_lines.parquet (points) and odds_lines_{rebounds,assists}.parquet from the live snapshots."""
     (DATA / 'live').mkdir(exist_ok=True)
-    subprocess.run([sys.executable, str(ROOT / 'parse_odds.py'), '--raw-dir', str(LIVE),
-                    '--out-dir', str(DATA / 'live')], check=True, capture_output=True)
+    for market in LIVE_MARKETS:
+        r = subprocess.run([sys.executable, str(ROOT / 'parse_odds.py'), '--raw-dir', str(LIVE), '--out-dir', str(DATA / 'live'),
+                            '--market', market], capture_output=True, text=True)
+        if r.returncode != 0 and market == 'player_points':      # points must parse; a missing other market isn't fatal
+            raise RuntimeError('parse_odds failed: ' + (r.stderr or r.stdout)[-300:])
 
 
 # ---------------------------------------------------------------- the pick
@@ -381,8 +388,9 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
     if 'p_over' not in f:
         site['status'], site['message'] = 'error', 'No noon lines were found for today\'s games.'
         return site
-    board, bet_idx = make_board(f, status, day, left_behind(games, day, None if replay else espn_rosters(day)),
-                                {} if replay else load_json(REMOVED).get(str(day), {}))
+    left = left_behind(games, day, None if replay else espn_rosters(day))
+    removed = {} if replay else load_json(REMOVED).get(str(day), {})
+    board, bet_idx = make_board(f, status, day, left, removed)
 
     site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
     site['slate']['overrides'] = over
@@ -391,15 +399,21 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
     site['model'] = model_payload(om)
     site['roster'] = roster_payload(games, day, schedule, weights, status, export_model(paths))
     check_browser_model(paths, site, f)
+    to_bet = [(board, i) for i in bet_idx]
+    site['markets'] = {}
+    for market, (mb, midx) in stat_boards(games, day, schedule, weights, status, replay, left, removed).items():
+        site['markets'][market] = {'board': [row_payload(r) for _, r in mb.head(15).iterrows()], 'n_props': int(len(mb)),
+                                   'n_eligible': int((mb['skip'] == '').sum()), 'bets': len(midx)}
+        to_bet += [(mb, i) for i in midx]
     bets = []
-    for i in bet_idx:
-        p = board.loc[i]
+    for src, i in to_bet:
+        p = src.loc[i]
         bet = {'date': str(day), 'player': p['player_name'], 'PLAYER_ID': int(p['PLAYER_ID']), 'team': abbr(p['team']),
                'opponent': abbr(team_names().get(p['OPP_ID'], '')), 'event_id': p.get('event_id'),
                'commence_time': p.get('commence_time'), 'side': p['side'], 'line': float(p['early_line']),
                'price': int(p['price']), 'book': BOOK_NAMES.get(p['book'], p['book']), 'p_side': round(float(p['p_side']), 4),
-               'edge': round(float(p['edge']), 4), 'stake': float(p['stake'])}
-        site['picks'].append({**bet, **row_payload(p), 'books': book_prices(p, replay),
+               'edge': round(float(p['edge']), 4), 'stake': float(p['stake']), 'market': p.get('market', 'points')}
+        site['picks'].append({**bet, **row_payload(p), 'books': book_prices(p, replay, bet['market']),
                               'link': link(p.get('early_best_over_link' if p['side'] == 'OVER' else 'early_best_under_link'))})
         if replay and pd.notna(p.get('close_line')):        # replays know the close already
             over = p['side'] == 'OVER'
@@ -534,9 +548,46 @@ def model_payload(om):
             'sd_cuts': [round(float(x), 3) for x in pm['bins'][1:-1]], 'sd': [round(float(x), 3) for x in pm['sd']]}
 
 
-def book_prices(p, replay):
+def stat_lines(market, day, replay):
+    """The day's noon lines for a stat market: the live log, else the historical pull (replays)."""
+    for path in ([] if replay else [DATA / 'live' / f'odds_lines_{market}.parquet']) + [DATA / f'odds_lines_{market}.parquet']:
+        if path.exists():
+            x = pd.read_parquet(path)
+            x = x[pd.to_datetime(x['commence_time'], utc=True).dt.tz_convert(ET).dt.date == day]
+            if not x.empty:
+                return x
+    return pd.DataFrame()
+
+
+def stat_boards(games, day, schedule, weights, status, replay, left, removed):
+    """{market: (board, bet indexes)} for rebounds and assists, through the same make_board skips as points."""
+    import stat_models as SM
+    from predict_today import features_as_of, project
+    if not SM.MODEL_PATH.exists():
+        return {}
+    sm = joblib.load(SM.MODEL_PATH)
+    lines = {m: stat_lines(m, day, replay) for m in STAT_MARKETS}
+    if all(l.empty for l in lines.values()):
+        return {}
+    fa = project(features_as_of(games, day, schedule, [], weights, keep_out=True), joblib.load(DATA / 'models' / 'points_model.pkl'))
+    x = SM.tonight_inputs(games, day, fa, weights)
+    out = {}
+    for market, y in SM.project_tonight(x, sm).items():
+        d = SM.score_props(y, lines[market], sm[market])
+        if d.empty:
+            continue
+        key = STAT_MARKETS[market]
+        d = d.assign(pred_points=d['proj'], pts_season=d[f'{key}_season'], pts_5=d[f'{key}_5'], market=market)
+        out[market] = make_board(d, status, day, left, removed)
+    return out
+
+
+def book_prices(p, replay, market='points'):
     """Every book's noon price for the pick's side, scored against the same model probability."""
-    path = DATA / ('odds_books.parquet' if replay else 'live/odds_books.parquet')
+    sfx = '' if market == 'points' else f'_{market}'
+    path = DATA / (f'odds_books{sfx}.parquet' if replay else f'live/odds_books{sfx}.parquet')
+    if not path.exists():
+        return []
     b = pd.read_parquet(path)
     b = b[(b['snapshot'] == 'early') & (b['event_id'] == p['event_id']) & (b['player'].map(norm) == norm(p['player_name']))]
     over = p['side'] == 'OVER'
@@ -577,6 +628,7 @@ def slate_payload(schedule, board, f, status, sources, unmatched, odds_note, gam
 
 def read_log(paths):
     log = pd.read_csv(paths.log) if paths.log.exists() else pd.DataFrame(columns=LOG_COLS)
+    log['market'] = log['market'].fillna('points') if 'market' in log else 'points'
     return log.astype({'result': object, 'close_line': float, 'close_novig_side': float, 'clv': float,
                        'points': float, 'units': float})
 
@@ -606,9 +658,13 @@ def run_close(paths, window_min):
     api = OddsAPI()
     snapshot(api, [{'id': e, 'commence_time': t.strftime('%Y-%m-%dT%H:%M:%SZ')} for e, t in due.items()], 'close')
     parse_live()
-    lines = pd.read_parquet(DATA / 'live' / 'odds_lines.parquet')
     done = []
     for i, b in todo[todo['event_id'].isin(due.index)].iterrows():
+        sfx = '' if b['market'] == 'points' else f"_{b['market']}"
+        path = DATA / 'live' / f'odds_lines{sfx}.parquet'
+        if not path.exists():
+            done.append(f"{b['player']} {b['market']}: no close file"); continue
+        lines = pd.read_parquet(path)
         row = lines[(lines['event_id'] == b['event_id']) & (lines['player'].map(norm) == norm(b['player']))]
         if row.empty or pd.isna(row['close_line'].iloc[0]):
             done.append(f"{b['player']}: no longer listed")
@@ -620,6 +676,14 @@ def run_close(paths, window_min):
         done.append(f"{b['player']} close {r['close_line']} ({log.loc[i, 'clv']:+.1f})")
     log.to_csv(paths.log, index=False)
     return 'close line ' + '; '.join(done)
+
+
+@functools.cache
+def stat_box():
+    """{(GAME_ID, PLAYER_ID): {'reb': .., 'ast': ..}} from the box score files."""
+    import stat_backtest as SB
+    b = SB.box_stats()
+    return {(g, int(p)): {'reb': r, 'ast': a} for g, p, r, a in zip(b['GAME_ID'], b['PLAYER_ID'], b['reb'], b['ast'])}
 
 
 def settle(paths, games):
@@ -635,7 +699,13 @@ def settle(paths, games):
         if not g['played'].iloc[0]:
             log.loc[i, ['result', 'units']] = ['void', 0.0]
         else:
-            pts = g['points'].iloc[0]
+            if b['market'] in STAT_MARKETS:
+                v = stat_box().get((str(g['GAME_ID'].iloc[0]), int(b['PLAYER_ID'])))
+                if v is None:
+                    continue                                  # that box score has no rebounds/assists yet
+                pts = v[STAT_MARKETS[b['market']]]
+            else:
+                pts = g['points'].iloc[0]
             won = pts > b['line'] if b['side'] == 'OVER' else pts < b['line']
             log.loc[i, 'points'] = pts
             log.loc[i, 'result'] = 'push' if pts == b['line'] else ('win' if won else 'loss')
@@ -695,7 +765,7 @@ def record(paths):
     if log.empty:
         return {'ledger': []}
     led = log.sort_values('date').assign(won=lambda x: x['result'].map({'win': True, 'loss': False}))
-    cols = ['date', 'player', 'team', 'opponent', 'side', 'line', 'price', 'book', 'edge', 'stake', 'result', 'won',
+    cols = ['date', 'player', 'team', 'opponent', 'market', 'side', 'line', 'price', 'book', 'edge', 'stake', 'result', 'won',
             'points', 'units', 'close_line', 'clv']
     return {'ledger': json.loads(led[cols].rename(columns={'opponent': 'opp', 'close_line': 'close'})
                                  .to_json(orient='records'))}
@@ -791,7 +861,7 @@ def main():
                 if args.replay:
                     settle(paths, games)            # replays know the result already
                 write_site(paths, site)
-                print(f"{day}: " + ('; '.join(f"BET {p['player']} {p['side']} {p['line']} @ {p['price']:+d} {p['book']} "
+                print(f"{day}: " + ('; '.join(f"BET {p['player']} {p['side']} {p['line']} {p.get('market', 'points')} @ {p['price']:+d} {p['book']} "
                                               f"(edge {p['edge']:+.1%}, {p['stake']:g}u)" for p in site['picks'])
                                     or site['message']), flush=True)
             if not args.replay and site['picks']:
