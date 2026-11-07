@@ -554,13 +554,15 @@ function whyBlock(p) {
   }
   const B = (p.books || []).map(b => !BOOST || b.edge === null ? b : { ...b, price: boosted(b.price, BOOST), edge: p.p - implied(boosted(b.price, BOOST)) });
   const best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
-  const books = B.length ? `<details class="bookcmp"><summary>Compare all ${B.length} books</summary><table class="books"><thead><tr><th>${BOOST ? `Each book, ${BOOST * 100}% boost` : 'Same bet at each book'}</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody>
+  const books = B.length ? `<table class="books"><thead><tr><th>${BOOST ? `Each book, ${BOOST * 100}% boost` : 'Same bet at each book'}</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody>
     ${B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
-      <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('')}</tbody></table></details>` : '';
-  return `<div class="whybet"><h3>${esc(p.player)} <span>${cap(p.side)} ${p.line}</span></h3>
+      <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('')}</tbody></table>` : '';
+  const label = `Projection ${p.proj} vs ${p.line} line${B.length ? ` · all ${B.length} book${B.length > 1 ? 's' : ''}` : ''}`;
+  return `<div class="whybet"><h3>${esc(p.player)} <span>${cap(p.side)} ${p.line}</span></h3>${boost}
+    <details class="bookcmp"><summary>${label}</summary>
     <div class="strip" aria-hidden="true">${strip}</div>
     <p class="why">Projects <b>${p.proj}</b> ${UNIT} (± ${p.sigma}) vs a <b>${p.line}</b> line.
-      ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.</p>${boost}${books}</div>`;
+      ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.</p>${books}</details></div>`;
 }
 
 function renderDeep() { renderWhy(); renderWho(); renderBoard(); renderMine(); }
