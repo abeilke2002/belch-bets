@@ -169,7 +169,9 @@ def game_rows(event_id, teams, match):
                         'position': 'S' if p['starter'] else '',
                         'points': int(num(v.get('PTS'))), 'fieldGoalsMade': fgm, 'fieldGoalsAttempted': fga,
                         'threePointersMade': tpm, 'threePointersAttempted': tpa,
-                        'freeThrowsMade': ftm, 'freeThrowsAttempted': fta})
+                        'freeThrowsMade': ftm, 'freeThrowsAttempted': fta,
+                        'reboundsOffensive': int(num(v.get('OREB'))), 'reboundsTotal': int(num(v.get('REB'))),
+                        'assists': int(num(v.get('AST')))})
     return box, info, when
 
 
