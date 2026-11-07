@@ -784,10 +784,16 @@ def write_site(paths, site):
 
 
 def copy_pages(paths):
-    """The site's pages, past seasons (build_history.py) and sportsbook logos (from site/) into the published folder."""
-    for page in [*(ROOT / 'site').glob('*.html'), ROOT / 'site' / 'model.js', ROOT / 'site' / 'seasons.json']:
-        shutil.copy(page, paths.site / page.name)
-    shutil.copytree(ROOT / 'site' / 'img', paths.site / 'img', dirs_exist_ok=True)
+    """The site's pages, past seasons (build_history*.py), shared styles and sportsbook logos into the published folder.
+    rebounds.html and assists.html are both made from site/market.html."""
+    src = ROOT / 'site'
+    for page in [*src.glob('*.html'), *src.glob('seasons*.json'), src / 'model.js', src / 'common.css']:
+        if page.name != 'market.html' and page.exists():
+            shutil.copy(page, paths.site / page.name)
+    tmpl = (src / 'market.html').read_text()
+    for market in STAT_MARKETS:
+        (paths.site / f'{market}.html').write_text(tmpl.replace('__MARKET__', market).replace('__TITLE__', market.capitalize()))
+    shutil.copytree(src / 'img', paths.site / 'img', dirs_exist_ok=True)
 
 
 def deploy(paths):

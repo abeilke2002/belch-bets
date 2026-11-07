@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b0d10">
+<!-- Template for rebounds.html and assists.html: daily_pipeline.copy_pages fills in __MARKET__ / __TITLE__. -->
+<title>__TITLE__ · The Noon Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="common.css">
+<style>
+.mhead { padding-block: 40px 8px; display: grid; gap: 10px; }
+.mhead h1 { font: 800 clamp(34px, 6vw, 52px)/1.02 var(--display); letter-spacing: -.02em; margin: 0; }
+.mhead p { margin: 0; color: var(--muted); max-width: 64ch; }
+.mhead .rule { color: var(--accent); font-weight: 600; }
+.bets { display: grid; gap: 0; }
+.betrow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); }
+.betrow:last-child { border-bottom: 1px solid var(--line); }
+.betrow .pn { font: 700 20px/1.15 var(--display); letter-spacing: -.01em; }
+.betrow .bl { font: 600 17px/1.2 var(--display); color: var(--accent); }
+.betrow .why { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.betrow .why .price { color: var(--ink-2); font-weight: 600; }
+.betrow .mid { display: grid; gap: 4px; }
+.betrow .res { text-align: right; }
+@media (max-width: 640px) { .betrow { grid-template-columns: minmax(0, 1fr) auto; } .betrow .mid { grid-column: 1 / -1; order: 3; } }
+.nobets { padding: 18px 0; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.mview section { padding-block: 30px; border-top: 1px solid var(--line); display: grid; gap: 16px; min-width: 0; }
+.mview section:first-of-type { border-top: 0; }
+.mview h2 { font: 700 20px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <nav class="sitenav" aria-label="Site">
+      <a class="brand" href="./">The Noon <span>Line</span></a>
+      <a href="./">Home</a><a href="points.html">Points</a><a href="rebounds.html">Rebounds</a><a href="assists.html">Assists</a>
+    </nav>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="View">
+        <button id="v-today" aria-pressed="true">Today</button><button id="v-history" aria-pressed="false">History</button>
+      </div>
+      <span class="daynav" id="daynav">
+        <button class="icon" id="prev" aria-label="Previous day">‹</button>
+        <button class="textbtn" id="today">Latest</button>
+        <button class="icon" id="next" aria-label="Next day">›</button>
+      </span>
+      <a class="textbtn howlink" href="method.html">How it works</a>
+    </div>
+  </header>
+
+  <div id="banner"></div>
+  <div class="mhead">
+    <p class="small" id="dateline"></p>
+    <h1 id="title">__TITLE__</h1>
+    <p><span class="rule" id="rule"></span> <span id="rulenote"></span></p>
+  </div>
+
+  <div class="mview" id="today-view">
+    <section>
+      <div class="shead"><h2 id="bets-title">Today's bets</h2><p id="bets-sub"></p></div>
+      <div class="bets" id="bets"></div>
+    </section>
+    <section id="board-sec">
+      <div class="shead"><h2>Edge board</h2><p>The day's top props. Tap a logo to bet.</p></div>
+      <table class="board">
+        <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
+        <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
+        <tbody id="board"></tbody>
+      </table>
+    </section>
+    <section>
+      <div class="shead"><h2>This season</h2><p id="season-sub"></p></div>
+      <div class="stats" id="stats"></div>
+      <div class="chart" id="chart"></div>
+    </section>
+  </div>
+
+  <div class="hist" id="hist" hidden>
+    <div class="scards" id="scards" role="group" aria-label="Season"></div>
+    <section>
+      <div class="shead"><h2 id="h-title"></h2><p id="h-note"></p></div>
+      <div class="stats" id="h-stats"></div>
+      <div class="chart" id="h-chart"></div>
+      <div id="h-plays"></div>
+    </section>
+  </div>
+
+  <footer>
+    <span>Bets post around noon ET on game days. Results update the next morning. <a href="method.html">How it works</a></span>
+    <span>Bet responsibly. Past results don't guarantee future ones.</span>
+    <label class="statepick" id="state">Your state, for sportsbook links
+      <select id="state-sel" aria-label="Your state"><option value="">Choose</option></select></label>
+  </footer>
+</div>
+
+<script>
+const MARKET = '__MARKET__';
+const UNIT = { rebounds: 'rebounds', assists: 'assists' }[MARKET];
+const RULE = { rebounds: ['Unders only.', 'Every rebound under with a 2%+ edge at the best noon price, 1 unit each. The backtest\'s rebound overs lost money, so the model only bets unders.'],
+               assists: ['Both sides.', 'Every assists prop with a 2%+ edge at the best noon price, over or under, 1 unit each.'] }[MARKET];
+const $ = id => document.getElementById(id);
+const pct = (v, d = 1) => (v * 100).toFixed(d) + '%';
+const sgn = (v, d = 1) => { const a = Math.abs(v).toFixed(d); return (+a === 0 ? '' : v > 0 ? '+' : '−') + a; };
+const odds = p => (p > 0 ? '+' : '−') + Math.abs(p);
+const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+const short = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const monthName = (m, o = { month: 'long', year: 'numeric' }) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', o);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cap = s => s === 'UNDER' ? 'Under' : 'Over';
+const settledResult = r => ['win', 'loss', 'void', 'push'].includes(r);
+const cls = v => Math.abs(v) < 0.05 ? '' : v > 0 ? 'pos' : 'neg';
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+async function getJSON(path) { const r = await fetch(path, { cache: 'no-store' }); if (!r.ok) throw new Error(path + ' ' + r.status); return r.json(); }
+
+/* sportsbook links: same rules as the points page */
+const LOGO = { DraftKings: 'draftkings', FanDuel: 'fanduel', BetMGM: 'betmgm', Caesars: 'caesars' };
+const STATES = ['az','co','ct','dc','ia','il','in','ks','ky','la','ma','md','mi','nc','nh','nj','ny','oh','pa','tn','va','vt','wv','wy'];
+const userState = () => store.get('bb-state') || '';
+const FALLBACK = { DraftKings: 'https://sportsbook.draftkings.com/leagues/basketball/nba',
+                   FanDuel: 'https://sportsbook.fanduel.com/navigation/nba',
+                   BetMGM: 'https://sports.{state}.betmgm.com/en/sports/basketball-7/betting/usa-9/nba-6004',
+                   Caesars: 'https://sportsbook.caesars.com/us/{state}/bet/basketball' };
+function betUrl(url) { if (!url) return null; if (!url.includes('{state}')) return url; return userState() ? url.replaceAll('{state}', userState()) : '#state'; }
+const linkWrap = (url, name, inner) => {
+  const u = betUrl(url || FALLBACK[name]);
+  if (!u) return inner;
+  const ext = u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : '';
+  const tip = u === '#state' ? `Set your state at the bottom of the page to open ${name}` : url ? `Add this bet to your ${name} bet slip` : `Open the ${name} NBA page`;
+  return `<a class="bklink" href="${esc(u)}"${ext} title="${esc(tip)}">${inner}</a>`;
+};
+const logo = (name, url) => LOGO[name] ? linkWrap(url, name, `<img src="img/${LOGO[name]}.png" alt="${esc(name)}" title="${esc(name)}">`) : '';
+const book = (name, url) => linkWrap(url, name, `<span class="bk">${LOGO[name] ? `<img src="img/${LOGO[name]}.png" alt="">` : ''}${esc(name)}<span class="ext" aria-hidden="true">↗</span></span>`);
+
+let DATA = null, DATES = [], LATEST = null, LIVE = [];
+const mine = x => (x && x.market) === MARKET;
+
+/* ---------- today ---------- */
+function renderToday() {
+  const picks = (DATA.picks || []).filter(mine);
+  const ledger = (DATA.record?.ledger || []).filter(mine);
+  const row = p => ledger.find(b => b.date === DATA.date && b.player === p.player && b.side === p.side);
+  $('dateline').textContent = longDate(DATA.date);
+  $('banner').innerHTML = DATA.status === 'error' ? `<div class="banner">Today's update failed. ${esc(DATA.message)}</div>` : '';
+  const m = (DATA.markets || {})[MARKET];
+  $('bets-title').textContent = picks.length ? `${picks.length} bet${picks.length === 1 ? '' : 's'}` : 'No bets';
+  $('bets-sub').textContent = m ? `${m.n_props} ${MARKET} props today, ${m.n_eligible} eligible after the skips.` : '';
+  $('bets').innerHTML = picks.length ? picks.map(p => {
+    const L = row(p), done = L && settledResult(L.result);
+    const res = !done ? '<span class="res other">Pending</span>'
+      : `<span class="res ${L.result === 'win' ? 'win' : L.result === 'loss' ? 'loss' : 'other'}">${{ win: 'Won', loss: 'Lost', void: 'Void', push: 'Push' }[L.result]}</span>
+         <div class="small">${L.points != null ? `${L.points} ${UNIT} · ` : ''}<span class="${cls(L.units)}">${sgn(L.units, 2)}u</span></div>`;
+    return `<div class="betrow">
+      <div><div class="pn">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp)}</div></div>
+      <div class="mid"><div class="bl">${cap(p.side)} ${p.line} ${UNIT}</div>
+        <div class="why"><span class="price">${odds(p.price)}</span> ${book(p.book, p.link)}</div>
+        <div class="why">model ${Number(p.proj).toFixed(1)} · ${pct(p.p, 0)} to hit · edge ${sgn(p.edge * 100)}%</div></div>
+      <div class="res">${res}</div></div>`;
+  }).join('') : `<div class="nobets">${m ? `No ${MARKET} prop cleared the 2% edge today.` : (DATA.games || []).length ? `No ${MARKET} lines for this day.` : 'No games this day.'}</div>`;
+
+  const B = m ? m.board : [];
+  $('board-sec').hidden = !B.length;
+  const top = Math.max(...B.map(r => r.edge), 0.04);
+  $('board').innerHTML = B.map(r => {
+    const dec = r.play === 'bet' ? `<span class="dec-bet">Bet ${r.stake ?? 1}u</span>`
+      : r.play === 'skip' ? `<span class="dec-skip">Skip</span> <span class="small">${esc(r.why).toLowerCase()}</span>`
+      : `<span class="dec-pass">Pass</span>`;
+    return `<tr class="is-${r.play}"><td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp} · model ${Number(r.proj).toFixed(1)}</div></td>
+      <td><span class="betcell">${logo(r.book)}${cap(r.side)} ${r.line} <span class="muted">${odds(r.price)}</span></span></td>
+      <td class="r">${pct(r.p, 0)}</td>
+      <td class="r"><span class="edge">${sgn(r.edge * 100)}%<span class="bar"><i style="width:${Math.max(0, r.edge / top * 100)}%"></i><span class="t" style="left:${0.02 / top * 100}%"></span></span></span></td>
+      <td>${dec}</td></tr>`;
+  }).join('');
+
+  const S = LIVE.filter(b => b.date <= DATA.date && (b.result === 'win' || b.result === 'loss'));
+  const t = summary(S);
+  $('season-sub').textContent = S.length ? `${S.length} settled ${MARKET} bets since ${short(S[0].date)}` : '';
+  $('stats').innerHTML = S.length ? figs(t, S.length) : '<p class="muted">The record starts with the first settled bet.</p>';
+  if (S.length) drawChart(S, $('chart')); else $('chart').innerHTML = '';
+}
+
+function summary(L) {
+  const wins = L.filter(b => b.result === 'win').length, units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + b.stake, 0);
+  return { wins, losses: L.length - wins, units, roi: risked ? units / risked : 0 };
+}
+const figs = (t, n) => [[`${sgn(t.units)}u`, 'profit', cls(t.units)], [`${t.wins}–${t.losses}`, `record, ${pct(t.wins / n, 0)}`, ''],
+  [`${sgn(t.roi * 100)}%`, 'return on units risked', '']].map(([v, k, c]) => `<div class="fig"><span class="n ${c}">${v}</span><span class="k">${k}</span></div>`).join('');
+
+function drawChart(L, box) {
+  const W = 600, H = 230, m = { l: 40, r: 8, t: 10, b: 26 };
+  let c = 0; const pts = [0, ...L.map(b => (c += b.units))], n = pts.length - 1;
+  const ymin = Math.min(0, ...pts), ymax = Math.max(0, ...pts), step = Math.max(1, Math.ceil((ymax - ymin) / 4));
+  const y0 = Math.floor(ymin / step) * step, y1 = Math.max(Math.ceil(ymax / step) * step, y0 + step);
+  const X = i => m.l + (i / Math.max(n, 1)) * (W - m.l - m.r), Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+  let g = '';
+  for (let v = y0; v <= y1; v += step) g += `<line class="${v === 0 ? 'zero' : 'grid'}" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)}</text>`;
+  [1, Math.round(n / 2), n].filter((v, i, a) => v >= 1 && a.indexOf(v) === i).forEach(i =>
+    g += `<text class="tick" x="${X(i)}" y="${H - 6}" text-anchor="${i === 1 ? 'start' : i === n ? 'end' : 'middle'}">${short(L[i - 1].date)}</text>`);
+  const line = pts.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' '), area = `${X(0)},${Y(0)} ${line} ${X(n)},${Y(0)}`;
+  const ab = box.id + '-ab', be = box.id + '-be';
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Running profit over ${n} bets, now ${sgn(pts[n])} units">
+    <defs><clipPath id="${ab}"><rect width="${W}" height="${Y(0)}"/></clipPath><clipPath id="${be}"><rect y="${Y(0)}" width="${W}" height="${H}"/></clipPath></defs>
+    ${g}<polygon class="up" points="${area}" clip-path="url(#${ab})"/><polygon class="down" points="${area}" clip-path="url(#${be})"/><polyline class="line" points="${line}"/></svg>`;
+}
+
+/* ---------- history ---------- */
+let SEASONS = null, HSEL = null;
+const TAGS = { live: 'Live', backtest: 'Backtest' };
+const seasonOf = d => { const [y, mo] = d.split('-').map(Number), s = mo >= 8 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, '0')}`; };
+async function renderHistory() {
+  if (!SEASONS) {
+    const past = (await getJSON(`seasons_${MARKET}.json`).catch(() => ({ seasons: [] }))).seasons;
+    SEASONS = [{ season: seasonOf(LATEST || new Date().toISOString().slice(0, 10)), kind: 'live', note: `Live: the ${MARKET} bets the site posted, at the noon price.`, bets: LIVE },
+               ...past].map(s => ({ ...s, bets: [...s.bets].sort((a, b) => a.date.localeCompare(b.date)) }));
+    HSEL = HSEL || SEASONS[0].kind + SEASONS[0].season;
+  }
+  $('scards').innerHTML = SEASONS.map(s => {
+    const L = s.bets.filter(b => b.result === 'win' || b.result === 'loss'), t = summary(L);
+    return `<button class="scard" type="button" data-s="${s.kind + s.season}" aria-pressed="${s.kind + s.season === HSEL}">
+      <span class="tag ${s.kind}">${TAGS[s.kind]}</span><span class="sn">${s.season}</span>
+      <span class="u ${L.length ? cls(t.units) : 'muted'}">${L.length ? sgn(t.units) + 'u' : '–'}</span>
+      <span class="k">${L.length ? `${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% return` : 'no settled bets yet'}</span></button>`;
+  }).join('');
+  $('scards').querySelectorAll('.scard').forEach(b => b.onclick = () => { HSEL = b.dataset.s; renderHistory(); });
+  const s = SEASONS.find(x => x.kind + x.season === HSEL), L = s.bets.filter(b => b.result === 'win' || b.result === 'loss'), t = summary(L);
+  $('h-title').textContent = `${s.season} · ${TAGS[s.kind]}`;
+  $('h-note').textContent = s.note;
+  $('h-stats').innerHTML = L.length ? figs(t, L.length) : '';
+  if (L.length) drawChart(L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled bet.</p>';
+  const months = {};
+  [...s.bets].reverse().forEach(b => (months[b.date.slice(0, 7)] ||= []).push(b));
+  $('h-plays').innerHTML = Object.entries(months).map(([mo, bets]) => {
+    const u = bets.reduce((a, b) => a + (settledResult(b.result) ? b.units : 0), 0), w = bets.filter(b => b.result === 'win').length, l = bets.filter(b => b.result === 'loss').length;
+    return `<details class="month"><summary><span class="t">${monthName(mo)}</span><span class="m">${w}–${l} · <span class="${cls(u)}">${sgn(u, 2)}u</span></span></summary>
+      <table class="plays"><tbody>${bets.map(b => `<tr><td class="d">${short(b.date)}</td>
+        <td><div class="name">${esc(b.player)} <span class="muted" style="font-weight:400">${cap(b.side)} ${b.line}</span></div>
+          <div class="small">${esc(b.team)} vs ${esc(b.opp ?? b.opponent)} · ${odds(b.price)} ${esc(b.book)} · edge ${sgn(b.edge * 100)}%${b.points != null ? ` · ${b.points} ${UNIT}` : ''}</div></td>
+        <td class="r"><span class="res ${b.result === 'win' ? 'win' : b.result === 'loss' ? 'loss' : 'other'}">${{ win: 'Won', loss: 'Lost', void: 'Void', push: 'Push' }[b.result] || 'Pending'}</span>
+          <div class="small ${settledResult(b.result) ? cls(b.units) : ''}">${settledResult(b.result) ? sgn(b.units, 2) + 'u' : ''}</div></td></tr>`).join('')}</tbody></table></details>`;
+  }).join('') || '<p class="muted">No bets yet this season.</p>';
+}
+
+/* ---------- views, days ---------- */
+function setView(v) {
+  $('today-view').hidden = v !== 'today'; $('hist').hidden = v !== 'history'; $('daynav').hidden = v !== 'today';
+  $('v-today').setAttribute('aria-pressed', String(v === 'today')); $('v-history').setAttribute('aria-pressed', String(v === 'history'));
+  if (v === 'history') renderHistory();
+}
+async function show(date) {
+  try {
+    DATA = date && date !== LATEST ? await getJSON(`history/${date}.json`) : await getJSON('picks.json');
+    history.replaceState(null, '', (!date || DATA.date === LATEST ? location.pathname : '#' + date));
+    renderToday();
+    const i = DATES.indexOf(DATA.date);
+    $('prev').disabled = i <= 0; $('next').disabled = i < 0 || i >= DATES.length - 1; $('today').disabled = DATA.date === LATEST;
+  } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load the data (${esc(e.message)}).</div>`; }
+}
+(async () => {
+  const wantHistory = location.search.includes('view=history');           // read before show() rewrites the address
+  [$('rule').textContent, $('rulenote').textContent] = RULE;
+  try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
+  try { const p = await getJSON('picks.json'); LATEST = p.date; LIVE = (p.record?.ledger || []).filter(mine).sort((a, b) => a.date.localeCompare(b.date)); } catch (e) {}
+  await show(location.hash.slice(1) || null);
+  $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
+  $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);
+  $('today').onclick = () => show(null);
+  $('v-today').onclick = () => setView('today'); $('v-history').onclick = () => setView('history');
+  const sel = $('state-sel');
+  sel.innerHTML += STATES.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
+  sel.value = userState(); sel.onchange = () => { store.set('bb-state', sel.value); renderToday(); };
+  if (wantHistory) setView('history');
+})();
+</script>
+</body>
+</html>

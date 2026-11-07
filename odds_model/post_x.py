@@ -43,6 +43,8 @@ LIMIT = 280
 SETTLED = ('win', 'loss', 'push', 'void')
 
 side = lambda b: 'O' if b['side'] == 'OVER' else 'U'
+STAT = {'points': 'pts', 'rebounds': 'reb', 'assists': 'ast'}
+stat = lambda b: STAT.get(b.get('market') or 'points', 'pts')        # bets before markets existed are points
 units = lambda v: f"{'+' if v >= 0 else '-'}{abs(v):.1f}u"
 day_label = lambda d: f"{date.fromisoformat(d):%a %b} {date.fromisoformat(d).day}"
 
@@ -73,10 +75,10 @@ TAGS_RESULTS = '#NBA #NBABets'
 
 def pick_block(p):
     """'Kobe Sanders U 12.5 (-108 DK)' and the reason: projection, chance to hit, season average."""
-    why = f"Model {p['proj']:.1f} pts · {p['p']:.0%} to hit"
+    why = f"Model {p['proj']:.1f} {stat(p)} · {p['p']:.0%} to hit"
     if p.get('season') is not None:
         why += f" · avg {p['season']:.1f}"
-    return f"{p['player']} {side(p)} {p['line']:g} ({p['price']:+d} {BOOK.get(p['book'], p['book'])})\n{why}"
+    return f"{p['player']} {side(p)} {p['line']:g} {stat(p)} ({p['price']:+d} {BOOK.get(p['book'], p['book'])})\n{why}"
 
 
 def picks_posts(site, note=''):
@@ -127,7 +129,7 @@ def week_text(ledger, monday):
         lines.append(f"Line moved our way after the pick: {ours} of {len(moved)} ({ours / len(moved):.0%})")
     best = max(week, key=lambda b: b['units'] or 0)
     if (best['units'] or 0) > 0:
-        lines.append(f"Best hit: {best['player']} {side(best)} {best['line']:g} ({best['points']:g} pts)")
+        lines.append(f"Best hit: {best['player']} {side(best)} {best['line']:g} {stat(best)} ({best['points']:g})")
     return '\n'.join(['The Noon Line · weekly scorecard', ''] + lines + ['', 'Every bet counted, wins and losses.', TAGS_RESULTS])[:LIMIT]
 
 
@@ -135,7 +137,7 @@ def results_text(site):
     """Every bet from the night with its points and result, the night's total and the season's."""
     word = {'win': 'W', 'loss': 'L', 'push': 'push', 'void': 'void, DNP'}
     bets = night(site)
-    lines = [f"{b['player']} {side(b)} {b['line']:g}: " + (f"{b['points']:g} pts, " if b.get('points') is not None else '')
+    lines = [f"{b['player']} {side(b)} {b['line']:g} {stat(b)}: " + (f"{b['points']:g}, " if b.get('points') is not None else '')
              + word[b['result']] for b in bets]
     ledger = [b for b in site['record']['ledger'] if b['date'] <= site['date']]
     return fit(f"The Noon Line results · {day_label(site['date'])}", lines,
