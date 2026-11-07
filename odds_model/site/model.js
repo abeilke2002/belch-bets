@@ -122,6 +122,85 @@
     return teams;
   }
 
-  const api = { predict, addRedistribution, positionAbsences, withAbsences, project, teamProjections, inflate };
+  /* ---------- rebounds and assists (stat_models.py; trees from stat_model.json, inputs in each roster row's "s") ---------- */
+
+  // Teammates out tonight, rebuilt from {id: weight} the way stat_backtest.attach_out / add_new_absence build them:
+  // what the absent players average (reb_out_avg, ast_out_avg) for the team and at the player's position, how much of it
+  // is new compared with his earlier games, and his usual share of it. Minutes come from teamProjections (pts).
+  function statRows(S, team, weights, pts) {
+    const w = p => weights[p.id] ?? 0, val = (r, c) => isMissing(r[c]) ? 0 : r[c];
+    const tot = { reb: 0, ast: 0 }, byPos = {};
+    let outMin = 0, nOut = 0;
+    for (const p of team) {
+      outMin += (isMissing(p.x.min_season) ? 0 : p.x.min_season) * w(p); nOut += w(p);
+      if (!p.sx) continue;
+      for (const k of ['reb', 'ast']) {
+        const v = val(p.sx, k + '_out_avg') * w(p);
+        tot[k] += v;
+        if (p.spos) { const g = (byPos[p.spos] ??= { reb: 0, ast: 0 }); g[k] += v; }
+      }
+    }
+    const rows = [];
+    for (const p of team) {
+      if (w(p) >= 1 || !p.sx || !pts[p.id]) continue;
+      const r = { ...p.sx, pred_minutes: pts[p.id].minutes, out_min: outMin, n_out: nOut };
+      for (const k of ['reb', 'ast']) {
+        r['out_' + k] = tot[k];
+        r['out_' + k + '_pos'] = p.spos && byPos[p.spos] ? byPos[p.spos][k] : 0;
+        r['new_out_' + k] = r['out_' + k] - val(p.sx, `out_${k}_usual`);
+        r['new_out_' + k + '_pos'] = r['out_' + k + '_pos'] - val(p.sx, `out_${k}_pos_usual`);
+        const team_ = p.sx['team_' + k], share = !isMissing(team_) && team_ > 0 ? p.sx[k + '_season'] / team_ : NaN;
+        r['exp_extra_' + k] = r['new_out_' + k] * (isMissing(share) ? NaN : share);
+      }
+      rows.push({ id: p.id, row: r });
+    }
+    return rows;
+  }
+
+  // Poisson LightGBM: the trees sum to the log of the expected count (floored at 0.05, as stat_models.project_tonight)
+  const statMean = (m, row) => Math.max(Math.exp(predict(m, row)), 0.05);
+
+  // {market: {id: expected count}} for a team, given its points/minutes projections for the same weights
+  function statTeamProjections(S, team, weights, pts) {
+    const out = {};
+    for (const [market, m] of Object.entries(S.markets)) {
+      out[market] = {};
+      for (const { id, row } of statRows(S, team, weights, pts)) out[market][id] = statMean(m, row);
+    }
+    return out;
+  }
+
+  // Negative binomial P(count > line) and sd, size r by projection bin (stat_backtest.p_over)
+  function nbOver(mu, line, edges, rs) {
+    let i = 0;
+    while (i < edges.length - 2 && mu >= edges[i + 1]) i++;
+    const r = rs[Math.min(i, rs.length - 1)], q = mu / (r + mu), k = Math.floor(line);
+    let pmf = Math.pow(r / (r + mu), r), cdf = pmf;
+    for (let j = 0; j < k; j++) { pmf *= (j + r) / (j + 1) * q; cdf += pmf; }
+    return { p: Math.max(0, 1 - cdf), sd: Math.sqrt(mu + mu * mu / r) };
+  }
+
+  const logit = p => Math.log(p / (1 - p)), sigmoid = z => 1 / (1 + Math.exp(-z));
+  const implied = a => a > 0 ? 100 / (a + 100) : -a / (-a + 100);
+
+  // P(over) for one prop: the market's no-vig log-odds plus the model's weights (stat_models.score_props), and the
+  // edge on each side at the best prices. A side the market doesn't bet (rebound overs) gets edge -1.
+  function statScore(m, mu, line, mkt, overPrice, underPrice) {
+    const nb = nbOver(mu, line, m.edges, m.rs), pnb = Math.min(Math.max(nb.p, 1e-4), 1 - 1e-4), ln = logit(mkt);
+    const f = { gap: mu - line, gapz: (mu - line) / nb.sd, dlogit: logit(pnb) - ln };
+    const pOver = sigmoid(ln + m.clf_b[0] + m.clf_cols.reduce((s, c, i) => s + m.clf_b[i + 1] * f[c], 0));
+    return { pOver, sd: nb.sd, eo: m.sides.includes('OVER') ? pOver - implied(overPrice) : -1,
+             eu: m.sides.includes('UNDER') ? (1 - pOver) - implied(underPrice) : -1 };
+  }
+
+  // Attach each roster player's stat inputs (named) once
+  function inflateStats(S, teams) {
+    for (const players of Object.values(teams))
+      for (const p of players) if (p.s) p.sx = Object.fromEntries(S.columns.map((c, i) => [c, p.s[i] === null ? NaN : p.s[i]]));
+    return teams;
+  }
+
+  const api = { predict, addRedistribution, positionAbsences, withAbsences, project, teamProjections, inflate,
+                statRows, statTeamProjections, nbOver, statScore, inflateStats };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BBModel = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -401,9 +401,14 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
     check_browser_model(paths, site, f)
     to_bet = [(board, i) for i in bet_idx]
     site['markets'] = {}
-    for market, (mb, midx) in stat_boards(games, day, schedule, weights, status, replay, left, removed).items():
+    boards, sx, sproj = stat_boards(games, day, schedule, weights, status, replay, left, removed)
+    if sx is not None:
+        stat_roster(site['roster'], sx, export_stat_model(paths))
+        check_stat_model(paths, site, sproj, boards)
+    for market, (mb, midx) in boards.items():
         site['markets'][market] = {'board': [row_payload(r) for _, r in mb.head(15).iterrows()], 'n_props': int(len(mb)),
-                                   'n_eligible': int((mb['skip'] == '').sum()), 'bets': len(midx)}
+                                   'n_eligible': int((mb['skip'] == '').sum()), 'bets': len(midx),
+                                   'props': stat_props_payload(mb)}
         to_bet += [(mb, i) for i in midx]
     bets = []
     for src, i in to_bet:
@@ -489,19 +494,20 @@ def props_payload(board):
 BROWSER_COLS = ['pts_season', 'min_season', 'fga_season', 'team_fga_pg', 'out_fga_season_avg', 'out_fga_5', 'ret_mpg']
 
 
+def trees(model):
+    """A LightGBM model as nested lists: [feature, threshold, defaultLeft, missingIsNaN, left, right] or a leaf."""
+    d = model.booster_.dump_model()
+    def node(n):
+        if 'leaf_value' in n:
+            return n['leaf_value']
+        return [n['split_feature'], n['threshold'], int(n['default_left']), int(n['missing_type'] == 'NaN'),
+                node(n['left_child']), node(n['right_child'])]
+    return {'features': d['feature_names'], 'trees': [node(t['tree_structure']) for t in d['tree_info']]}
+
+
 def export_model(paths):
     """The minutes and points models as compact trees for site/model.js (written next to picks.json)."""
     pm = joblib.load(DATA / 'models' / 'points_model.pkl')
-
-    def trees(model):
-        d = model.booster_.dump_model()
-        def node(n):
-            if 'leaf_value' in n:
-                return n['leaf_value']
-            return [n['split_feature'], n['threshold'], int(n['default_left']), int(n['missing_type'] == 'NaN'),
-                    node(n['left_child']), node(n['right_child'])]
-        return {'features': d['feature_names'], 'trees': [node(t['tree_structure']) for t in d['tree_info']]}
-
     cols = list(dict.fromkeys(pm['minutes_features'] + [c for c in pm['features'] if c != 'pred_minutes'] + BROWSER_COLS))
     out = {'trained_through': pm['trained_through'], 'columns': cols, 'damping': list(pm['damping']),
            'minutes': trees(pm['minutes_model']), 'points': trees(pm['model'])}
@@ -523,6 +529,67 @@ def check_browser_model(paths, site, f):
                            capture_output=True, text=True, cwd=ROOT)
     if r.returncode != 0:
         raise RuntimeError('browser model does not match Python: ' + (r.stdout or r.stderr)[-300:])
+
+
+# Built in the browser from the lineup (model.js statTeamProjections); everything else comes from the roster
+STAT_LINEUP = {'pred_minutes', 'out_min', 'n_out', 'out_reb', 'out_ast', 'out_reb_pos', 'out_ast_pos', 'new_out_reb',
+               'new_out_ast', 'new_out_reb_pos', 'new_out_ast_pos', 'exp_extra_reb', 'exp_extra_ast'}
+STAT_HELPERS = ['reb_out_avg', 'ast_out_avg', 'out_reb_usual', 'out_ast_usual', 'out_reb_pos_usual', 'out_ast_pos_usual',
+                'reb_season', 'ast_season', 'team_reb', 'team_ast', 'reb_5', 'ast_5']
+
+
+def export_stat_model(paths):
+    """The rebounds and assists models for model.js: trees, count dispersion, P(over) weights (stat_model.json)."""
+    import stat_models as SM
+    sm = joblib.load(SM.MODEL_PATH)
+    markets = {m: {'key': STAT_MARKETS[m], 'features': sm[m]['features'], 'edges': [float(v) for v in sm[m]['edges']],
+                   'rs': [float(v) for v in sm[m]['rs']], 'clf_cols': sm[m]['clf_cols'], 'clf_b': sm[m]['clf_b'],
+                   'sides': list(sm[m]['sides']), **trees(sm[m]['model'])} for m in STAT_MARKETS if m in sm}
+    feats = [f for m in markets.values() for f in m['features'] if f not in STAT_LINEUP]
+    cols = list(dict.fromkeys(feats + STAT_HELPERS))
+    (paths.site / 'stat_model.json').write_text(json.dumps(
+        {'trained_through': sm['trained_through'], 'columns': cols, 'markets': markets}, separators=(',', ':')))
+    return cols
+
+
+def stat_roster(roster, x, cols):
+    """Each roster player's rebounds/assists inputs ('s', in stat_model.json column order) and position group."""
+    by = x.drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')
+    for players in roster.values():
+        for c in players:
+            if c['id'] in by.index:
+                r = by.loc[c['id']]
+                c['s'] = [None if pd.isna(r[k]) else float(r[k]) for k in cols]
+                c['spos'] = None if pd.isna(r['pos']) else str(r['pos'])
+                c['rpg'], c['apg'] = round(float(r['reb_out_avg']), 1), round(float(r['ast_out_avg']), 1)
+
+
+def check_stat_model(paths, site, proj, boards):
+    """model.js must reproduce tonight's Python rebounds/assists projections and P(over) or nothing is published."""
+    import tempfile
+    exp = {'proj': {m: {int(i): float(v) for i, v in zip(y['PLAYER_ID'], y['proj'])} for m, y in proj.items()},
+           'props': {m: [[int(r['PLAYER_ID']), float(r['early_line']), float(r['early_novig_over']), float(r['p_over'])]
+                         for _, r in b.iterrows()] for m, (b, _) in boards.items()}}
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        for f in ['model.json', 'stat_model.json']:
+            shutil.copy(paths.site / f, tmp / f)
+        (tmp / 'day.json').write_text(json.dumps({'roster': site['roster']}))
+        (tmp / 'expected.json').write_text(json.dumps(exp))
+        r = subprocess.run(['node', str(ROOT / 'test_browser_stats.js'), str(tmp)], capture_output=True, text=True, cwd=ROOT)
+    print(r.stdout.strip())
+    if r.returncode != 0:
+        raise RuntimeError('browser rebounds/assists model does not match Python: ' + (r.stdout or r.stderr)[-300:])
+
+
+def stat_props_payload(board):
+    """props_payload plus what the stat pages show: last five, the count model's spread."""
+    out = props_payload(board)
+    for o, (_, r) in zip(out, board.iterrows()):
+        o['mkt'] = round(float(r['early_novig_over']), 6)
+        o['last5'] = None if pd.isna(r['pts_5']) else round(float(r['pts_5']), 1)
+        o['sd'] = round(float(r['pred_sd']), 2)
+    return out
 
 
 def roster_payload(games, day, schedule, weights, status, cols):
@@ -564,22 +631,22 @@ def stat_boards(games, day, schedule, weights, status, replay, left, removed):
     import stat_models as SM
     from predict_today import features_as_of, project
     if not SM.MODEL_PATH.exists():
-        return {}
+        return {}, None, {}
     sm = joblib.load(SM.MODEL_PATH)
     lines = {m: stat_lines(m, day, replay) for m in STAT_MARKETS}
     if all(l.empty for l in lines.values()):
-        return {}
+        return {}, None, {}
     fa = project(features_as_of(games, day, schedule, [], weights, keep_out=True), joblib.load(DATA / 'models' / 'points_model.pkl'))
-    x = SM.tonight_inputs(games, day, fa, weights)
-    out = {}
-    for market, y in SM.project_tonight(x, sm).items():
+    x = SM.tonight_inputs(games, day, fa, weights, keep_out=True)
+    out, proj = {}, SM.project_tonight(x, sm)
+    for market, y in proj.items():
         d = SM.score_props(y, lines[market], sm[market])
         if d.empty:
             continue
         key = STAT_MARKETS[market]
         d = d.assign(pred_points=d['proj'], pts_season=d[f'{key}_season'], pts_5=d[f'{key}_5'], market=market)
         out[market] = make_board(d, status, day, left, removed)
-    return out
+    return out, x, proj
 
 
 def book_prices(p, replay, market='points'):
@@ -727,8 +794,20 @@ def finals_for(games, site):
     names = {r['player_name']: pts(r) for _, r in g.iterrows()}
     want_ids = {int(p['id']) for p in site.get('props') or []}
     want_names = {b['player'] for b in site.get('board') or []}
-    return {'ids': {str(i): v for i, v in ids.items() if i in want_ids},
-            'names': {n: v for n, v in names.items() if n in want_names}}
+    out = {'ids': {str(i): v for i, v in ids.items() if i in want_ids},
+           'names': {n: v for n, v in names.items() if n in want_names}}
+    if site.get('markets'):                              # rebounds/assists boards: the stat itself
+        box, out['markets'] = stat_box(), {}
+        for market, key in STAT_MARKETS.items():
+            want = {int(x['id']) for x in (site['markets'].get(market) or {}).get('props') or []}
+            vals = {}
+            for _, r in g[g['PLAYER_ID'].isin(want)].iterrows():
+                v = box.get((r['GAME_ID'], int(r['PLAYER_ID'])), {}).get(key)
+                if r['played'] and (v is None or pd.isna(v)):
+                    continue                             # played, box score row not in yet
+                vals[str(int(r['PLAYER_ID']))] = float(v) if r['played'] else None
+            out['markets'][market] = vals
+    return out
 
 
 def add_finals(paths, games, site, days=3):

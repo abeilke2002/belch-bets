@@ -86,15 +86,18 @@ def team_now(played, season):
                                     pace=('pace', 'mean'), team_reb=('reb', 'mean'), team_ast=('ast', 'mean')).reset_index()
 
 
-def tonight_inputs(games, day, fa, weights):
-    """Stat-model inputs for tonight's players. fa: features_as_of + project rows (keep_out=True, with pred_minutes)."""
+def tonight_inputs(games, day, fa, weights, keep_out=False):
+    """Stat-model inputs for tonight's players. fa: features_as_of + project rows (keep_out=True, with pred_minutes).
+    keep_out: also keep players ruled out (the website lets you put them back in). Every row carries reb_out_avg /
+    ast_out_avg, what the player takes off the team when he sits (out_stats' merge_asof), so the browser can rebuild
+    out_reb / out_ast for any lineup."""
     from predict_today import season_of
     season = season_of(day)
     hist = history(day)
     # every played game (the backtest's played_all), for team context and absent teammates' averages
     played = games[games['played'] & games['season'].isin(hist['season'].unique()) & (games['GAME_DATE'] < pd.Timestamp(day))] \
         .merge(SB.box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='inner')
-    tonight = fa[fa['out_w'].fillna(0) < 1].copy()
+    tonight = (fa if keep_out else fa[fa['out_w'].fillna(0) < 1]).copy()
     tonight['season'], tonight['GAME_DATE'] = season, pd.Timestamp(day)
     pos = load_positions().set_index('PLAYER_ID')['pos']
     tonight['pos'] = tonight['PLAYER_ID'].map(pos)
@@ -125,6 +128,12 @@ def tonight_inputs(games, day, fa, weights):
     if rows.empty:
         rows = pd.DataFrame(columns=['PLAYER_ID', 'TEAM_ID', 'GAME_ID', 'season', 'GAME_DATE', 'weight'])
     x = SB.attach_out(x, rows, avgs, pos)
+    me = pd.merge_asof(x[['PLAYER_ID', 'season', 'GAME_DATE']].astype({'GAME_DATE': avgs['GAME_DATE'].dtype}).sort_values('GAME_DATE'),
+                       avgs.sort_values('GAME_DATE'),
+                       on='GAME_DATE', by=['PLAYER_ID', 'season'], allow_exact_matches=False)
+    me = me.drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')
+    x['reb_out_avg'] = x['PLAYER_ID'].map(me['reb_avg']).fillna(0)
+    x['ast_out_avg'] = x['PLAYER_ID'].map(me['ast_avg']).fillna(0)
     cur = hist[hist['season'] == season].copy()
     if len(cur):
         g = games[(games['season'] == season) & (games['GAME_DATE'] < pd.Timestamp(day))]
@@ -145,7 +154,7 @@ def project_tonight(x, models):
     for market, m in models.items():
         if market == 'trained_through':
             continue
-        y = x.copy()
+        y = x[x['out_w'].fillna(0) < 1].copy() if 'out_w' in x else x.copy()
         y['proj'] = np.maximum(m['model'].predict(y[m['features']]), 0.05)
         out[market] = y
     return out
