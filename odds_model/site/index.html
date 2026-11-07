@@ -11,30 +11,55 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="common.css">
 <style>
-.intro { padding-block: 44px 10px; display: grid; gap: 12px; }
-.intro h1 { font: 800 clamp(34px, 6vw, 54px)/1.02 var(--display); letter-spacing: -.02em; margin: 0; }
-.intro p { margin: 0; color: var(--ink-2); max-width: 64ch; font-size: 15.5px; }
-.home section { padding-block: 32px; border-top: 1px solid var(--line); display: grid; gap: 18px; }
+/* Model colors: identity only (each model's bars and accents). Green/red stay for wins/losses. */
+:root { --m-points: #e8a35c; --m-rebounds: #5fa8f0; --m-assists: #b58cf2; --m-all: #d7dbe1; }
+.intro { padding-block: 40px 6px; }
+.intro .small { margin: 0 0 6px; }
+.intro h1 { font: 800 clamp(32px, 5.6vw, 50px)/1.02 var(--display); letter-spacing: -.02em; margin: 0; }
+.home section { padding-block: 30px; border-top: 1px solid var(--line); display: grid; gap: 18px; }
 .home section:first-of-type { border-top: 0; }
 .home h2 { font: 700 21px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
+
+/* Today */
 .models { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.mcard { border: 1px solid var(--line-2); border-radius: 12px; padding: 16px 18px; display: grid; gap: 8px; text-decoration: none; }
-.mcard:hover { border-color: var(--accent); }
-.mcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mcard .mn { font: 700 19px/1.1 var(--display); }
+.mcard { border: 1px solid var(--line-2); border-top: 3px solid var(--mc); border-radius: 12px; padding: 14px 18px 16px; display: grid; gap: 8px; text-decoration: none; align-content: start; }
+.mcard:hover { border-color: var(--mc); }
+.mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+.mcard .mn { font: 700 18px/1.1 var(--display); }
 .mcard .mr { font-size: 13px; color: var(--muted); }
 .mcard .today { font: 700 26px/1.1 var(--display); }
 .mcard .today small { font: 500 13px/1 var(--body); color: var(--muted); margin-left: 6px; }
-.mcard .go { font-size: 13px; color: var(--accent); }
 .mcard ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13.5px; color: var(--ink-2); }
-.res-table { min-width: 640px; }
-.res-table th, .res-table td { vertical-align: top; }
-.res-table td.season { font-weight: 600; white-space: nowrap; }
-.res-table .u { font: 700 18px/1.2 var(--display); }
-.res-table .k { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-.res-table tr.total td { border-top: 2px solid var(--line-2); }
-.res-table .tag { margin-left: 8px; }
-.tablewrap { overflow-x: auto; }
+.mcard .go { font-size: 13px; color: var(--mc); }
+.waiting { color: var(--ink-2); font-size: 15px; }
+.waiting a { color: var(--accent); }
+
+/* Results: one card per model, a bar per season on a shared scale */
+.rcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 16px; }
+.rcard { border: 1px solid var(--line-2); border-radius: 14px; padding: 18px 20px 20px; display: grid; gap: 16px; align-content: start; background: #0f1216; }
+.rcard header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.rcard .rn { font: 700 19px/1.1 var(--display); display: inline-flex; align-items: center; gap: 9px; }
+.rcard .rn i { width: 10px; height: 10px; border-radius: 3px; background: var(--mc); display: inline-block; }
+.rcard .rn a { text-decoration: none; }
+.rcard .rn a:hover { color: var(--mc); }
+.rcard .rr { font-size: 12.5px; color: var(--muted); }
+.rstats { display: flex; flex-wrap: wrap; gap: 12px 30px; }
+.rstat .v { white-space: nowrap; }
+.rstat .v { font: 700 19px/1.15 var(--display); letter-spacing: -.01em; }
+.rstat .l { font-size: 12px; color: var(--muted); }
+.bars { display: grid; gap: 11px; }
+.bar { display: grid; grid-template-columns: 70px minmax(0, 1fr) 66px; align-items: center; gap: 12px; font-size: 13px; }
+.bar .lbl { color: var(--ink-2); white-space: nowrap; }
+.bar .lbl small { display: block; font-size: 11px; color: var(--muted); }
+.track { height: 10px; border-radius: 999px; background: #1b2028; overflow: hidden; }
+.fill { height: 100%; border-radius: inherit; background: var(--mc); transform-origin: left center; animation: grow .8s cubic-bezier(.2, .7, .2, 1) both; }
+.fill.neg { background: var(--loss); }
+.bar .val { text-align: right; font-weight: 700; }
+.bar .val.neg { color: var(--loss); }
+.bar .val.none { color: var(--muted); font-weight: 400; }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .fill { animation: none; } }
+.rnote { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 80ch; }
 </style>
 </head>
 <body>
@@ -50,23 +75,19 @@
   <div id="banner"></div>
   <div class="intro">
     <p class="small" id="dateline"></p>
-    <h1>Three models, one rule.</h1>
-    <p>Each model projects tonight's points, rebounds or assists from box scores and the noon injury report, and bets every
-      prop where its chance beats the best noon price by 2% or more, at 1 unit.</p>
+    <h1>Noon Line Projections</h1>
   </div>
 
   <div class="home">
     <section>
       <div class="shead"><h2>Today</h2><p id="today-sub"></p></div>
-      <div class="models" id="models"></div>
+      <div id="today"></div>
     </section>
     <section>
-      <div class="shead"><h2>Results by season</h2>
-        <p>Units won at 1 unit a bet. Past seasons are backtests: every model trained only on earlier seasons, the same skips as live.</p></div>
-      <div class="tablewrap"><table class="res-table">
-        <thead><tr><th>Season</th><th>Points</th><th>Rebounds <span class="small">(unders)</span></th><th>Assists</th><th>All three</th></tr></thead>
-        <tbody id="results"></tbody>
-      </table></div>
+      <div class="shead"><h2>Three models, one rule</h2><p>Every prop with a 2%+ edge at the best noon price, 1 unit each.</p></div>
+      <div class="rcards" id="results"></div>
+      <p class="rnote">Past seasons are backtests: each model trained only on earlier seasons, with the same skips as the live site.
+        The three model cards share one bar scale; the combined card has its own.</p>
     </section>
   </div>
 
@@ -85,6 +106,8 @@ const sgn = (v, d = 1) => { const a = Math.abs(v).toFixed(d); return (+a === 0 ?
 const cls = v => Math.abs(v) < 0.05 ? '' : v > 0 ? 'pos' : 'neg';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+const weekday = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+const todayET = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());   // YYYY-MM-DD
 const seasonOf = d => { const [y, mo] = d.split('-').map(Number), s = mo >= 8 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, '0')}`; };
 const marketOf = b => b.market || 'points';                      // bets from before markets existed are points
 async function getJSON(p) { const r = await fetch(p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' ' + r.status); return r.json(); }
@@ -94,46 +117,68 @@ function sum(bets) {
   const units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + (b.stake ?? 1), 0);
   return { n: L.length, wins, losses: L.length - wins, units, roi: risked ? units / risked : 0 };
 }
-const cell = t => t.n ? `<div class="u ${cls(t.units)}">${sgn(t.units)}u</div><div class="k">${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% · ${t.n} bets</div>`
-                      : '<div class="k">no settled bets yet</div>';
+
+function renderToday(site) {
+  const today = todayET();
+  $('dateline').textContent = longDate(today);
+  if (!site) return;
+  if (site.status === 'error' && site.date === today) $('banner').innerHTML = `<div class="banner">Today's update failed. ${esc(site.message)}</div>`;
+  if (site.date !== today) {                                     // picks.json still holds the last posted day
+    $('today-sub').textContent = '';
+    $('today').innerHTML = `<p class="waiting">Today's bets post around noon ET. Last posted: <a href="points.html">${weekday(site.date)}'s picks</a>.</p>`;
+    return;
+  }
+  const picks = site.picks || [];
+  $('today-sub').textContent = picks.length ? `${picks.length} bet${picks.length === 1 ? '' : 's'} across the three models.` : (site.message || 'No bets today.');
+  const ledger = site.record?.ledger || [];
+  $('today').innerHTML = `<div class="models">${MODELS.map(M => {
+    const P = picks.filter(p => marketOf(p) === M.m);
+    const list = P.slice(0, 3).map(p => `<li>${esc(p.player)} · ${p.side === 'UNDER' ? 'U' : 'O'} ${p.line} ${M.unit}</li>`).join('');
+    return `<a class="mcard" href="${M.page}" style="--mc:var(--m-${M.m})"><span class="mn">${M.name}</span>${M.note ? `<span class="mr">${M.note}</span>` : ''}
+      <span class="today">${P.length}<small>bet${P.length === 1 ? '' : 's'}</small></span>
+      ${list ? `<ul>${list}${P.length > 3 ? `<li class="muted">+${P.length - 3} more</li>` : ''}</ul>` : ''}
+      <span class="go">See ${M.name.toLowerCase()} →</span></a>`;
+  }).join('')}</div>`;
+}
+
+async function renderResults(site) {
+  const ledger = site?.record?.ledger || [];
+  const liveSeason = seasonOf(todayET());
+  const past = await Promise.all(MODELS.map(M => getJSON(M.file).then(d => d.seasons).catch(() => [])));
+  const seasons = [...new Set([liveSeason, ...past.flat().map(s => s.season)])].sort().reverse();
+  const betsFor = (i, season) => season === liveSeason ? ledger.filter(b => marketOf(b) === MODELS[i].m && seasonOf(b.date) === liveSeason)
+                                                       : (past[i].find(s => s.season === season)?.bets || []);
+  const cards = MODELS.map((M, i) => ({ ...M, rows: seasons.map(s => ({ season: s, t: sum(betsFor(i, s)) })) }));
+  cards.push({ m: 'all', name: 'All three', rows: seasons.map(s => ({ season: s, t: sum(MODELS.flatMap((_, i) => betsFor(i, s))) })) });
+  // the three models share one scale (comparable bars); the combined card has its own
+  const big = rows => Math.max(1, ...rows.map(r => Math.abs(r.t.units)));
+  const modelScale = Math.max(...cards.filter(c => c.m !== 'all').map(c => big(c.rows)));
+  $('results').innerHTML = cards.map(c => {
+    const rows = c.rows, scale = c.m === 'all' ? big(rows) : modelScale;
+    const tot = rows.reduce((a, r) => ({ n: a.n + r.t.n, wins: a.wins + r.t.wins, units: a.units + r.t.units }), { n: 0, wins: 0, units: 0 });
+    const roi = tot.n ? tot.units / tot.n : 0;                      // 1u stakes: units per settled bet
+    const stats = [[tot.n ? `${sgn(roi * 100)}%` : '–', 'ROI'], [`${tot.wins}–${tot.n - tot.wins}`, 'Record'],
+                   [`${sgn(tot.units)}u`, 'Units', cls(tot.units)], [tot.n ? `${(tot.wins / tot.n * 100).toFixed(1)}%` : '–', 'Win %']];
+    const bars = rows.map(r => {
+      const live = r.season === liveSeason, w = Math.abs(r.t.units) / scale * 100;
+      const val = r.t.n ? `<span class="val ${r.t.units < 0 ? 'neg' : ''}">${sgn(r.t.units)}u</span>` : '<span class="val none">–</span>';
+      return `<div class="bar" title="${r.season}: ${r.t.wins}–${r.t.losses}, ${sgn(r.t.units)}u">
+        <span class="lbl">${r.season}<small>${live ? 'live' : 'backtest'}</small></span>
+        <div class="track"><div class="fill ${r.t.units < 0 ? 'neg' : ''}" style="width:${w.toFixed(1)}%"></div></div>${val}</div>`;
+    }).join('');
+    const title = c.page ? `<a href="${c.page}">${c.name}</a>` : c.name;
+    return `<article class="rcard" style="--mc:var(--m-${c.m})">
+      <header><span class="rn"><i></i>${title}</span><span class="rr">${c.note || (c.m === 'all' ? 'combined' : 'both sides')}</span></header>
+      <div class="rstats">${stats.map(([v, l, k]) => `<div class="rstat"><div class="v ${k || ''}">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
+      <div class="bars">${bars}</div></article>`;
+  }).join('');
+}
 
 (async () => {
   let site = null;
   try { site = await getJSON('picks.json'); } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load today's data.</div>`; }
-  const ledger = site?.record?.ledger || [];
-  const liveSeason = seasonOf(site?.date || new Date().toISOString().slice(0, 10));
-
-  // Today: bets per model, linking to each page
-  if (site) {
-    $('dateline').textContent = longDate(site.date);
-    if (site.status === 'error') $('banner').innerHTML = `<div class="banner">Today's update failed. ${esc(site.message)}</div>`;
-    const picks = site.picks || [];
-    $('today-sub').textContent = picks.length ? `${picks.length} bet${picks.length === 1 ? '' : 's'} across the three models.` : (site.message || '');
-    $('models').innerHTML = MODELS.map(M => {
-      const P = picks.filter(p => marketOf(p) === M.m), live = sum(ledger.filter(b => marketOf(b) === M.m));
-      const list = P.slice(0, 3).map(p => `<li>${esc(p.player)} · ${p.side === 'UNDER' ? 'U' : 'O'} ${p.line} ${M.unit}</li>`).join('');
-      return `<a class="mcard" href="${M.page}"><span class="mn">${M.name}</span>${M.note ? `<span class="mr">${M.note}</span>` : ''}
-        <span class="today">${P.length}<small>bet${P.length === 1 ? '' : 's'} today</small></span>
-        ${list ? `<ul>${list}${P.length > 3 ? `<li class="muted">+${P.length - 3} more</li>` : ''}</ul>` : ''}
-        <span class="mr">${liveSeason}: ${live.n ? `<span class="${cls(live.units)}">${sgn(live.units)}u</span> · ${live.wins}–${live.losses}` : 'no settled bets yet'}</span>
-        <span class="go">See ${M.name.toLowerCase()} →</span></a>`;
-    }).join('');
-  }
-
-  // Results by season: the live season from the ledger, past seasons from each model's backtest file
-  const past = await Promise.all(MODELS.map(M => getJSON(M.file).then(d => d.seasons).catch(() => [])));
-  const seasons = [...new Set([liveSeason, ...past.flat().map(s => s.season)])].sort().reverse();
-  const totals = MODELS.map(() => []);
-  const rows = seasons.map(season => {
-    const per = MODELS.map((M, i) => season === liveSeason
-      ? ledger.filter(b => marketOf(b) === M.m)
-      : (past[i].find(s => s.season === season)?.bets || []));
-    per.forEach((b, i) => totals[i].push(...b));
-    const kind = season === liveSeason ? '<span class="tag live">Live</span>' : '<span class="tag backtest">Backtest</span>';
-    return `<tr><td class="season">${season}${kind}</td>${per.map(b => `<td>${cell(sum(b))}</td>`).join('')}<td>${cell(sum(per.flat()))}</td></tr>`;
-  });
-  rows.push(`<tr class="total"><td class="season">All seasons</td>${totals.map(b => `<td>${cell(sum(b))}</td>`).join('')}<td>${cell(sum(totals.flat()))}</td></tr>`);
-  $('results').innerHTML = rows.join('');
+  renderToday(site);
+  renderResults(site);
 })();
 </script>
 </body>
