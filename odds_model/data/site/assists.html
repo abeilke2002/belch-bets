@@ -30,6 +30,11 @@
 .mview section { padding-block: 30px; border-top: 1px solid var(--line); display: grid; gap: 16px; min-width: 0; }
 .mview section:first-of-type { border-top: 0; }
 .mview h2 { font: 700 20px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
+.bookcmp summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; list-style: none; }
+.bookcmp summary::-webkit-details-marker { display: none; }
+.bookcmp summary::before { content: '›'; display: inline-block; width: 14px; transition: transform .15s; }
+.bookcmp[open] summary::before { transform: rotate(90deg); }
+.bookcmp summary:hover { color: var(--ink-2); }
 </style>
 </head>
 <body>
@@ -243,17 +248,20 @@ const setWho = o => store.set(whoKey(), JSON.stringify(o));
 const defaultState = c => c.w >= 1 ? 'out' : c.w > 0 ? 'half' : 'in';
 const STATE_W = { out: 1, half: 0.5, in: 0 };
 
+// The minutes editor needs only the props and stat_model.json; Who's playing also needs the roster's stat inputs
 async function loadModel() {
   TEAMS = null;
   for (const k in PROJ_CACHE) delete PROJ_CACHE[k];
-  if (!DATA.roster || !props() || !window.BBModel) return;
+  if (!props() || !window.BBModel) return;
+  try { if (!SMODEL) SMODEL = await getJSON('stat_model.json'); } catch (e) { SMODEL = null; return; }
+  if (!SMODEL.markets[MARKET] || !DATA.roster) return;
   try {
     if (!MODEL) MODEL = await getJSON('model.json');
-    if (!SMODEL) SMODEL = await getJSON('stat_model.json');
     const t = BBModel.inflateStats(SMODEL, BBModel.inflate(MODEL, DATA.roster));
-    if (SMODEL.markets[MARKET] && Object.values(t).flat().some(p => p.sx)) TEAMS = t;   // older days have no stat inputs
+    if (Object.values(t).flat().some(p => p.sx)) TEAMS = t;
   } catch (e) { TEAMS = null; }
 }
+const canScore = () => !!(props() && SMODEL && SMODEL.markets[MARKET]);
 
 function teamWithCalls(team) {
   const players = TEAMS && TEAMS[team];
@@ -390,7 +398,7 @@ function decisionText(r) {
 }
 
 function renderBoard() {
-  if (!(props() && TEAMS)) return renderBoardStatic();
+  if (!canScore()) return renderBoardStatic();
   const { rows, anyAdj } = scoredProps();
   $('board-sec').hidden = !rows.length;
   $('board-reset').hidden = !Object.keys(getOv()).length;
@@ -500,7 +508,7 @@ function renderBoardStatic() {
 
 function renderMine() {
   const box = $('mine');
-  if (!(props() && TEAMS)) { box.innerHTML = ''; return; }
+  if (!canScore()) { box.innerHTML = ''; return; }
   const { bets, anyAdj } = scoredProps();
   if (!anyAdj) { box.innerHTML = ''; return; }
   const key = x => (x.PLAYER_ID ?? x.id) + x.side, official = new Set(dayPicks().map(key)), now = new Set(bets.map(key));
@@ -520,7 +528,9 @@ function renderWhy() {
   if (!P.length) return;
   $('why-title').textContent = P.length > 1 ? 'Why these bets' : 'Why this bet';
   document.querySelectorAll('#boost button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.b === BOOST)));
+  const open = new Set([...document.querySelectorAll('#why-list details[open]')].map(d => d.dataset.k));
   $('why-list').innerHTML = P.map(whyBlock).join('');
+  $('why-list').querySelectorAll('details.bookcmp').forEach((d, i) => { d.dataset.k = P[i].player + P[i].side; d.open = open.has(d.dataset.k); });
 }
 
 function whyBlock(p) {
@@ -544,9 +554,9 @@ function whyBlock(p) {
   }
   const B = (p.books || []).map(b => !BOOST || b.edge === null ? b : { ...b, price: boosted(b.price, BOOST), edge: p.p - implied(boosted(b.price, BOOST)) });
   const best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
-  const books = B.length ? `<table class="books"><thead><tr><th>${BOOST ? `Each book, ${BOOST * 100}% boost` : 'Same bet at each book'}</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody>
+  const books = B.length ? `<details class="bookcmp"><summary>Compare all ${B.length} books</summary><table class="books"><thead><tr><th>${BOOST ? `Each book, ${BOOST * 100}% boost` : 'Same bet at each book'}</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody>
     ${B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
-      <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('')}</tbody></table>` : '';
+      <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('')}</tbody></table></details>` : '';
   return `<div class="whybet"><h3>${esc(p.player)} <span>${cap(p.side)} ${p.line}</span></h3>
     <div class="strip" aria-hidden="true">${strip}</div>
     <p class="why">Projects <b>${p.proj}</b> ${UNIT} (± ${p.sigma}) vs a <b>${p.line}</b> line.
