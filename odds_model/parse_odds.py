@@ -22,7 +22,7 @@ def american_to_decimal(a):
         return np.where(a > 0, 1 + a / 100, 1 + 100 / -a)
 
 
-def read_raw(raw_dir):
+def read_raw(raw_dir, market=MARKET):
     rows = []
     for f in sorted(Path(raw_dir).glob('*.json')):
         resp = json.loads(f.read_text())
@@ -32,7 +32,7 @@ def read_raw(raw_dir):
         ev = meta.get('event', data)
         for bk in data.get('bookmakers', []):
             for mk in bk.get('markets', []):
-                if mk['key'] != MARKET:
+                if mk['key'] != market:
                     continue
                 for o in mk['outcomes']:
                     rows.append({'event_id': data['id'], 'snapshot': meta.get('snapshot'),
@@ -89,15 +89,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--raw-dir', default=RAW)
     ap.add_argument('--out-dir', default=DATA)
+    ap.add_argument('--market', default=MARKET, help='e.g. player_rebounds; output files get a matching suffix')
     args = ap.parse_args()
     out = Path(args.out_dir)
+    sfx = '' if args.market == MARKET else '_' + args.market.replace('player_', '')
 
-    raw = read_raw(args.raw_dir)
+    raw = read_raw(args.raw_dir, args.market)
     if raw.empty:
         raise SystemExit('No props found in raw files.')
     raw = raw[raw['book'].isin(BOOKS)]              # only books you bet at (config.BOOKS)
     books = book_lines(raw)
-    books.to_parquet(out / 'odds_books.parquet', index=False)
+    books.to_parquet(out / f'odds_books{sfx}.parquet', index=False)
 
     cons = consensus(books)
     meta_cols = ['season', 'commence_time', 'home_team', 'away_team']
@@ -108,7 +110,7 @@ def main():
              .join(close[value_cols].add_prefix('close_'), how='outer'))
     meta = cons.groupby(['event_id', 'player'])[meta_cols].first()
     lines = meta.join(lines).reset_index()
-    lines.to_parquet(out / 'odds_lines.parquet', index=False)
+    lines.to_parquet(out / f'odds_lines{sfx}.parquet', index=False)
 
     print(f'{len(books):,} book lines, {books.book.nunique()} books, '
           f'{books.event_id.nunique()} games')
