@@ -41,7 +41,7 @@
     </nav>
     <div class="controls">
       <div class="seg" role="group" aria-label="View">
-        <button id="v-today" aria-pressed="true">Today</button><button id="v-history" aria-pressed="false">History</button>
+        <button id="v-today" aria-pressed="true">Today</button><button id="v-deep" aria-pressed="false">Deep dive</button><button id="v-history" aria-pressed="false">History</button>
       </div>
       <span class="daynav" id="daynav">
         <button class="icon" id="prev" aria-label="Previous day">‹</button>
@@ -59,23 +59,43 @@
     <p><span class="rule" id="rule"></span> <span id="rulenote"></span></p>
   </div>
 
+  <div id="mine"></div>
   <div class="mview" id="today-view">
     <section>
       <div class="shead"><h2 id="bets-title">Today's bets</h2><p id="bets-sub"></p></div>
       <div class="bets" id="bets"></div>
     </section>
+    <section>
+      <div class="shead"><h2>This season</h2><p id="season-sub"></p></div>
+      <div class="stats" id="stats"></div>
+      <div class="chart" id="chart"></div>
+    </section>
+  </div>
+
+  <div class="mview deep" id="deep" hidden>
+    <section id="why-sec">
+      <div class="shead"><h2 id="why-title">Why this bet</h2></div>
+      <div class="ctl">
+        <span class="lbl">Profit boost</span>
+        <div class="seg" id="boost" role="group" aria-label="Profit boost">
+          <button type="button" data-b="0" aria-pressed="true">None</button><button type="button" data-b="0.25" aria-pressed="false">25%</button><button type="button" data-b="0.3" aria-pressed="false">30%</button><button type="button" data-b="0.5" aria-pressed="false">50%</button>
+        </div>
+      </div>
+      <div id="why-list"></div>
+    </section>
+
+    <section id="who-sec">
+      <div class="shead"><h2>Who's playing</h2><p>Set anyone in or out. The model re-projects the team's assists. Your calls carry over to the points and other pages. <button class="textbtn" id="who-reset" type="button" hidden>Reset lineups</button></p></div>
+      <div id="who"></div>
+    </section>
+
     <section id="board-sec">
-      <div class="shead"><h2>Edge board</h2><p>The day's top props. Tap a logo to bet.</p></div>
+      <div class="shead"><h2>Edge board</h2><p id="board-sub">Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
       <table class="board">
         <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
         <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
         <tbody id="board"></tbody>
       </table>
-    </section>
-    <section>
-      <div class="shead"><h2>This season</h2><p id="season-sub"></p></div>
-      <div class="stats" id="stats"></div>
-      <div class="chart" id="chart"></div>
     </section>
   </div>
 
@@ -97,6 +117,7 @@
   </footer>
 </div>
 
+<script src="model.js"></script>
 <script>
 const MARKET = 'assists';
 const UNIT = { rebounds: 'rebounds', assists: 'assists' }[MARKET];
@@ -162,20 +183,6 @@ function renderToday() {
       <div class="res">${res}</div></div>`;
   }).join('') : `<div class="nobets">${m ? `No ${MARKET} prop cleared the 2% edge today.` : (DATA.games || []).length ? `No ${MARKET} lines for this day.` : 'No games this day.'}</div>`;
 
-  const B = m ? m.board : [];
-  $('board-sec').hidden = !B.length;
-  const top = Math.max(...B.map(r => r.edge), 0.04);
-  $('board').innerHTML = B.map(r => {
-    const dec = r.play === 'bet' ? `<span class="dec-bet">Bet ${r.stake ?? 1}u</span>`
-      : r.play === 'skip' ? `<span class="dec-skip">Skip</span> <span class="small">${esc(r.why).toLowerCase()}</span>`
-      : `<span class="dec-pass">Pass</span>`;
-    return `<tr class="is-${r.play}"><td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp} · model ${Number(r.proj).toFixed(1)}</div></td>
-      <td><span class="betcell">${logo(r.book)}${cap(r.side)} ${r.line} <span class="muted">${odds(r.price)}</span></span></td>
-      <td class="r">${pct(r.p, 0)}</td>
-      <td class="r"><span class="edge">${sgn(r.edge * 100)}%<span class="bar"><i style="width:${Math.max(0, r.edge / top * 100)}%"></i><span class="t" style="left:${0.02 / top * 100}%"></span></span></span></td>
-      <td>${dec}</td></tr>`;
-  }).join('');
-
   const S = LIVE.filter(b => b.date <= DATA.date && (b.result === 'win' || b.result === 'loss'));
   const t = summary(S);
   $('season-sub').textContent = S.length ? `${S.length} settled ${MARKET} bets since ${short(S[0].date)}` : '';
@@ -206,6 +213,347 @@ function drawChart(L, box) {
     <defs><clipPath id="${ab}"><rect width="${W}" height="${Y(0)}"/></clipPath><clipPath id="${be}"><rect y="${Y(0)}" width="${W}" height="${H}"/></clipPath></defs>
     ${g}<polygon class="up" points="${area}" clip-path="url(#${ab})"/><polygon class="down" points="${area}" clip-path="url(#${be})"/><polyline class="line" points="${line}"/></svg>`;
 }
+
+
+/* ---------- deep dive: why, who's playing, the edge board (same tools as the points page) ---------- */
+const KEY = { rebounds: 'rpg', assists: 'apg' }[MARKET], ABBR = { rebounds: 'reb', assists: 'ast' }[MARKET];
+const MIN_EDGE = 0.02, STAKE = 1;
+const implied = a => a > 0 ? 100 / (a + 100) : -a / (-a + 100);
+const payout = a => a > 0 ? a / 100 : 100 / -a;
+const boosted = (a, b) => { const w = payout(a) * (1 + b); return w >= 1 ? Math.round(w * 100) : -Math.round(100 / w); };
+const BOOSTS = [0, 0.25, 0.3, 0.5];
+let BOOST = 0, OPEN = null;
+const setBoost = b => { BOOST = b; renderWhy(); renderBoard(); };
+const props = () => DATA.markets?.[MARKET]?.props || null;
+const dayPicks = () => (DATA.picks || []).filter(mine);
+const ledgerFor = p => (DATA.record?.ledger || []).find(b => mine(b) && b.date === DATA.date && b.player === p.player && b.side === p.side);
+
+// Your minutes (shared with the points page: one minutes call per player per day)
+const ovKey = () => 'bb-min-' + DATA.date;
+const getOv = () => { try { return JSON.parse(store.get(ovKey()) || '{}'); } catch (e) { return {}; } };
+const setOv = o => store.set(ovKey(), JSON.stringify(o));
+const clampMin = v => Math.max(0, Math.min(48, Math.round(v * 2) / 2));
+
+// Who's playing (shared with the points page): the minutes model, then the rebounds/assists model, in model.js
+let MODEL = null, SMODEL = null, TEAMS = null;
+const PROJ_CACHE = {};
+const whoKey = () => 'bb-who-' + DATA.date;
+const getWho = () => { try { return JSON.parse(store.get(whoKey()) || '{}'); } catch (e) { return {}; } };
+const setWho = o => store.set(whoKey(), JSON.stringify(o));
+const defaultState = c => c.w >= 1 ? 'out' : c.w > 0 ? 'half' : 'in';
+const STATE_W = { out: 1, half: 0.5, in: 0 };
+
+async function loadModel() {
+  TEAMS = null;
+  for (const k in PROJ_CACHE) delete PROJ_CACHE[k];
+  if (!DATA.roster || !props() || !window.BBModel) return;
+  try {
+    if (!MODEL) MODEL = await getJSON('model.json');
+    if (!SMODEL) SMODEL = await getJSON('stat_model.json');
+    const t = BBModel.inflateStats(SMODEL, BBModel.inflate(MODEL, DATA.roster));
+    if (SMODEL.markets[MARKET] && Object.values(t).flat().some(p => p.sx)) TEAMS = t;   // older days have no stat inputs
+  } catch (e) { TEAMS = null; }
+}
+
+function teamWithCalls(team) {
+  const players = TEAMS && TEAMS[team];
+  if (!players) return null;
+  const who = getWho(), changes = players.filter(c => who[c.id] && who[c.id] !== defaultState(c));
+  if (!changes.length) return null;
+  const key = DATA.date + team + JSON.stringify(changes.map(c => [c.id, who[c.id]]));
+  if (!PROJ_CACHE[key]) {
+    const w = Object.fromEntries(players.map(c => [c.id, who[c.id] ? STATE_W[who[c.id]] : c.w]));
+    const pts = BBModel.teamProjections(MODEL, players, w), st = BBModel.statTeamProjections(SMODEL, players, w, pts)[MARKET];
+    PROJ_CACHE[key] = Object.fromEntries(Object.entries(st).map(([id, v]) => [id, { val: v, min: pts[id].minutes }]));
+  }
+  return PROJ_CACHE[key];
+}
+
+// Projection and minutes for a prop after your in/out calls. null = you've ruled him out.
+function lineup(x) {
+  const t = teamWithCalls(x.team);
+  if (!t) return { proj: x.proj, min: x.min, changed: false };
+  const r = t[x.id];
+  if (!r) return null;
+  return { proj: r.val, min: Math.max(0, r.min), changed: Math.abs(r.val - x.proj) > 0.005 };
+}
+
+function renderWho() {
+  const sec = $('who-sec'), G = DATA.games || [];
+  sec.hidden = !(TEAMS && G.length);
+  if (sec.hidden) return;
+  const propIds = new Set(props().map(x => x.id));
+  const W = Object.fromEntries(Object.entries(TEAMS).map(([t, ps]) => [t, ps.filter(c => c.status || propIds.has(c.id) || c.mpg >= 8)]));
+  const who = getWho();
+  const ctl = c => {
+    const opts = c.w > 0 && c.w < 1 ? [['out', 'Out'], ['half', '50/50'], ['in', 'Playing']] : [['out', 'Out'], ['in', 'Playing']];
+    const cur = who[c.id] || defaultState(c);
+    return `<span class="mini-seg" role="group" aria-label="${esc(c.name)}">${opts.map(([v, t]) =>
+      `<button type="button" data-id="${c.id}" data-v="${v}" aria-pressed="${cur === v}">${t}</button>`).join('')}</span>`;
+  };
+  const teamBlock = t => {
+    const list = [...(W[t] || [])].sort((a, b) => (b[KEY] ?? 0) - (a[KEY] ?? 0));
+    const row = c => `<div class="who-row${who[c.id] && who[c.id] !== defaultState(c) ? ' changed' : ''}">
+      <span class="who-name">${esc(c.name)} <span class="small">${c[KEY] ?? '–'} ${KEY}</span></span>
+      <span class="who-st st-${(c.status || 'none').split(' ')[0].toLowerCase()}">${esc(c.status || '')}</span>${ctl(c)}</div>`;
+    return `<div class="who-team"><p class="sub-h">${t}</p>${list.map(row).join('')}</div>`;
+  };
+  $('who').innerHTML = G.map(g => {
+    const all = [...(W[g.away] || []), ...(W[g.home] || [])];
+    const q = all.filter(c => c.status === 'Questionable').map(c => esc(c.name)), out = all.filter(c => c.w >= 1).length;
+    const bits = [q.length ? `Questionable: ${q.join(', ')}` : '', out ? `${out} out` : ''].filter(Boolean);
+    const n = all.filter(c => who[c.id] && who[c.id] !== defaultState(c)).length;
+    return `<details class="who-game"${n ? ' open' : ''}><summary><span class="g">${g.away} at ${g.home}</span>
+      <span class="small">${bits.length ? bits.join(' · ') : 'everyone expected to play'}</span>${n ? `<span class="you small">${n} changed</span>` : ''}</summary>
+      <div class="who-teams">${teamBlock(g.away)}${teamBlock(g.home)}</div></details>`;
+  }).join('');
+  $('who').querySelectorAll('.mini-seg button').forEach(b => b.addEventListener('click', () => {
+    const o = getWho(), id = +b.dataset.id, c = Object.values(TEAMS).flat().find(x => x.id === id);
+    if (b.dataset.v === defaultState(c)) delete o[id]; else o[id] = b.dataset.v;
+    setWho(o); OPEN = null; renderWho(); renderBoard(); renderMine();
+  }));
+  $('who-reset').hidden = !Object.keys(who).length;
+}
+
+// A prop scored with your lineup and minutes: the count model's P(over), anchored on the market (model.js statScore)
+function score(x, minutes, mineToo = true) {
+  const L = mineToo ? lineup(x) : { proj: x.proj, min: x.min, changed: false };
+  if (!L) return { ...x, ruledOut: true, adj: false, lineupAdj: true, edge: -1, eo: -1, eu: -1, side: 'UNDER', p: 0,
+                   price: x.under[0], book: x.under[1], link: x.under[2], projAdj: 0, mins: 0, pOver: 0, sdAdj: 0 };
+  const baseMin = L.min, mins = minutes ?? baseMin;
+  const proj = Math.max(0.05, baseMin > 0.5 ? L.proj * mins / baseMin : L.proj);
+  const s = SMODEL ? BBModel.statScore(SMODEL.markets[MARKET], proj, x.line, x.mkt, x.over[0], x.under[0])
+                   : { pOver: NaN, eo: -1, eu: -1, sd: x.sd };
+  const over = s.eo >= s.eu;
+  return { ...x, min: Math.round(baseMin * 10) / 10, mins, adj: minutes != null, lineupAdj: L.changed, projAdj: proj, sdAdj: s.sd,
+           pOver: s.pOver, eo: s.eo, eu: s.eu, side: over ? 'OVER' : 'UNDER', edge: Math.max(s.eo, s.eu),
+           p: over ? s.pOver : 1 - s.pOver, price: over ? x.over[0] : x.under[0], book: over ? x.over[1] : x.under[1],
+           link: over ? x.over[2] : x.under[2] };
+}
+
+function scoredProps() {
+  const ov = getOv();
+  const rows = props().map(x => holdSide({ ...score(x, x.id in ov ? ov[x.id] : null), base: score(x, null, false) }));
+  rows.forEach(r => { r.play = r.ruledOut ? 'out' : r.skip ? 'skip' : r.edge >= MIN_EDGE ? 'bet' : 'pass'; if (r.play === 'bet') r.stake = STAKE; });
+  rows.sort((a, b) => b.base.edge - a.base.edge);
+  const ids = new Set(rows.map(r => r.id));
+  const anyAdj = Object.keys(ov).some(id => ids.has(+id)) || Object.keys(getWho()).length > 0;
+  return { rows, bets: rows.filter(r => r.play === 'bet').sort((a, b) => b.edge - a.edge), anyAdj };
+}
+
+// If your changes leave no bettable side, keep showing the model's side so you can see its edge fall away
+function holdSide(r) {
+  if (!(r.adj || r.lineupAdj) || r.ruledOut || r.edge >= MIN_EDGE || r.side === r.base.side) return r;
+  const under = r.base.side === 'UNDER';
+  return { ...r, side: r.base.side, edge: under ? r.eu : r.eo, p: under ? 1 - r.pOver : r.pOver,
+           price: under ? r.under[0] : r.over[0], book: under ? r.under[1] : r.over[1], link: under ? r.under[2] : r.over[2] };
+}
+
+const skipWhy = s => s === 'back-to-back' ? 'back-to-back' : s.startsWith('last two weeks') ? 'season end'
+  : s.startsWith('new team') ? 'new team' : s.startsWith('teammate traded') ? 'teammate traded'
+  : s.startsWith('removed by hand') ? 'price gone' : (s.match(/\((\w+)\)/) || [, 'injury report'])[1].toLowerCase();
+const sideOnly = MARKET === 'rebounds' ? ' Rebounds bet unders only.' : '';
+
+function verdict(r) {
+  const b = r.base;
+  const projTxt = `Projection ${b.proj.toFixed(1)} → <b class="ink">${r.projAdj.toFixed(1)}</b> ${UNIT} against a ${r.line} line.`;
+  if (!r.adj) return { cls: '', html: `Projection ${r.projAdj.toFixed(1)} ${UNIT} at ${r.min} minutes. Set the minutes you expect, e.g. if he's been named a starter.` };
+  if (r.side !== b.side && r.edge >= MIN_EDGE)
+    return { cls: 'flip', html: `${projTxt} The value <b>flips to the ${cap(r.side).toLowerCase()}</b>: ${sgn(r.edge * 100)}% edge at ${odds(r.price)} (${esc(r.book)}).` };
+  if (r.edge < MIN_EDGE)
+    return { cls: 'gone', html: `${projTxt} <b>No edge at ${r.mins} minutes.</b> The model's ${sgn(b.edge * 100)}% on the ${cap(b.side).toLowerCase()} assumed ${r.min} minutes; ` +
+      `with your estimate it's ${sgn(r.edge * 100)}%, under the 2% needed to bet.${sideOnly}` };
+  return { cls: 'ok', html: `${projTxt} Still a bettable edge on the ${cap(r.side).toLowerCase()}: ${sgn(r.edge * 100)}% (${r.edge >= b.edge ? 'up' : 'down'} from ${sgn(b.edge * 100)}%).` };
+}
+
+const pCell = r => r.ruledOut ? '<span class="muted">–</span>' : `<span class="pl">P(${cap(r.side)})</span>${pct(r.p, 0)}`;
+function edgeCell(r, topE) {
+  const bar = `<span class="bar"><i style="width:${Math.max(0, r.edge / topE * 100)}%"></i><span class="t" style="left:${0.02 / topE * 100}%"></span></span>`;
+  if (r.ruledOut || r.edge <= -1) return `<span class="edge muted">–</span>`;
+  if (!(r.adj || r.lineupAdj) || Math.abs(r.edge - r.base.edge) < 0.0005) return `<span class="edge">${sgn(r.edge * 100)}%${bar}</span>`;
+  return `<span class="edge"><s class="was">${sgn(r.base.edge * 100)}%</s><span class="arrow">→</span><b class="${r.edge >= 0.02 ? 'ink' : 'neg'}">${sgn(r.edge * 100)}%</b></span>`;
+}
+function finalTag(v, side, line) {
+  if (v === undefined) return '';
+  if (v === null) return '<span class="fin other">DNP</span>';
+  const res = v === line ? 'other' : (side === 'OVER' ? v > line : v < line) ? 'win' : 'loss';
+  return `<span class="fin ${res}" title="${res === 'win' ? 'This side won' : res === 'loss' ? 'This side lost' : 'Push'}">${v} ${ABBR}</span>`;
+}
+const finalFor = r => finalTag(DATA.finals?.markets?.[MARKET]?.[r.id], r.side, r.line);
+
+function decisionText(r) {
+  if (r.play === 'bet') return `<span class="dec-bet">Bet ${r.stake}u</span>${r.adj ? ' <span class="small why-sub">your minutes</span>' : ''}`;
+  if (r.play === 'out') return `<span class="dec-gone">Out</span> <span class="small why-sub">your call</span>`;
+  if (r.play === 'skip') return `<span class="dec-skip">Skip</span> <span class="small why-sub">${esc(skipWhy(r.skip))}</span>`;
+  if ((r.adj || r.lineupAdj) && r.edge < 0.02 && r.base.edge >= 0.02) return `<span class="dec-gone">No edge</span> <span class="small why-sub">${r.adj ? 'at ' + r.mins + ' min' : 'with your lineup'}</span>`;
+  return `<span class="dec-pass">Pass</span> <span class="small why-sub">under 2%</span>`;
+}
+
+function renderBoard() {
+  if (!(props() && TEAMS)) return renderBoardStatic();
+  const { rows, anyAdj } = scoredProps();
+  $('board-sec').hidden = !rows.length;
+  $('board-reset').hidden = !Object.keys(getOv()).length;
+  const shown = rows.filter((r, i) => i < 15 || r.adj || r.id === OPEN || r.play === 'bet' || (r.lineupAdj && Math.abs(r.edge - r.base.edge) >= 0.01));
+  const topE = Math.max(...shown.map(r => Math.max(r.edge, r.base.edge)), 0.04);
+  $('board').innerHTML = shown.map(r => {
+    const minTxt = r.ruledOut ? '<span class="you">ruled out by you</span>'
+      : r.adj ? `<span class="you">${r.mins} min (yours, model ${r.min}) · proj ${r.projAdj.toFixed(1)}</span>`
+      : r.lineupAdj ? `<span class="you">${r.min} min · proj ${r.base.proj.toFixed(1)} → ${r.projAdj.toFixed(1)} with your lineup</span>`
+      : `${r.min} min · proj ${r.projAdj.toFixed(1)}`;
+    const sideTxt = r.adj && r.side !== r.base.side ? ` <span class="small">(was ${cap(r.base.side).toLowerCase()})</span>` : '';
+    return `<tr class="is-${r.play}${(r.adj && r.edge < 0.02) || r.ruledOut ? ' is-gone' : ''}${r.ruledOut ? '' : ' pickable'}${r.id === OPEN ? ' open' : ''}" data-id="${r.id}" tabindex="0" aria-expanded="${r.id === OPEN}">
+      <td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp} · ${minTxt}</div></td>
+      <td><span class="betcell">${logo(r.book, r.link)}<span class="bt"><span class="sd"><span class="long">${cap(r.side)}</span><span class="short">${r.side[0]}</span> ${r.line}</span> <span class="pr muted">${odds(r.price)}</span>${sideTxt}</span></span></td>
+      <td class="r pcol">${pCell(r)}</td>
+      <td class="r edgecol">${edgeCell(r, topE)}</td>
+      <td class="deccol">${decisionText(r)}${finalFor(r)}</td></tr>` + (r.id === OPEN && !r.ruledOut ? editorRow(r) : '');
+  }).join('');
+  $('board').querySelectorAll('tr.pickable').forEach(tr => {
+    const toggle = () => { const id = +tr.dataset.id; OPEN = OPEN === id ? null : id; renderBoard(); };
+    tr.addEventListener('click', e => { if (!e.target.closest('a')) toggle(); });
+    tr.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+  wireEditor();
+}
+
+function editorRow(r) {
+  const v = verdict(r);
+  return `<tr class="edrow"><td colspan="5"><div class="editor" data-id="${r.id}">
+    <div class="ctl">
+      <span class="lbl">Your minutes</span>
+      <button class="step" type="button" data-d="-1" aria-label="One minute less">−</button>
+      <input type="number" min="0" max="48" step="0.5" value="${r.mins}" aria-label="Minutes for ${esc(r.player)}">
+      <button class="step" type="button" data-d="1" aria-label="One minute more">+</button>
+      <input type="range" min="0" max="44" step="1" value="${r.mins}" aria-label="Minutes slider for ${esc(r.player)}">
+      <span class="small">model ${r.min}</span>
+      <button class="textbtn reset1" type="button">Reset</button>
+    </div>
+    <p class="verdict ${v.cls}">${v.html}</p>
+    <div class="ctl">
+      <span class="lbl">Profit boost</span>
+      <div class="seg bseg" role="group" aria-label="Profit boost for ${esc(r.player)}">
+        ${BOOSTS.map(b => `<button type="button" data-b="${b}" aria-pressed="${b === BOOST}">${b ? b * 100 + '%' : 'None'}</button>`).join('')}
+      </div>
+    </div>
+    ${BOOST ? boostVerdict(r) : ''}
+  </div></td></tr>`;
+}
+
+function boostVerdict(r) {
+  const side = (s, p, [price, bk]) => { const bp = boosted(price, BOOST); return { s, p, price, bp, bk, e0: p - implied(price), e: p - implied(bp), ev: p * payout(bp) - (1 - p) }; };
+  const o = side('OVER', r.pOver, r.over), u = side('UNDER', 1 - r.pOver, r.under);
+  const b = MARKET === 'rebounds' ? u : o.e >= u.e ? o : u, clears = b.e >= MIN_EDGE;
+  return `<p class="verdict ${clears ? 'ok' : 'gone'}">With a ${BOOST * 100}% boost on the ${cap(b.s).toLowerCase()} ${r.line},
+    ${odds(b.price)} at ${esc(b.bk)} becomes <b class="ink">${odds(b.bp)}</b>: edge <b class="${clears ? 'pos' : 'neg'}">${sgn(b.e * 100)}%</b>
+    (from ${sgn(b.e0 * 100)}%), about <b>${sgn(b.ev, 2)}u</b> expected per 1u bet. ${clears ? 'That clears the 2% bar.' : 'Still under the 2% bar.'}
+    <span class="small">Books round boosted odds differently; check your slip.</span></p>`;
+}
+
+function wireEditor() {
+  const ed = $('board').querySelector('.editor');
+  if (!ed) return;
+  const id = +ed.dataset.id, x = props().find(p => p.id === id), lmin = (lineup(x) || { min: x.min }).min;
+  const num = ed.querySelector('input[type=number]'), rng = ed.querySelector('input[type=range]');
+  const tr = $('board').querySelector(`tr.pickable[data-id="${id}"]`);
+  const preview = mins => {
+    let r = { ...score(x, Math.abs(mins - lmin) < 0.25 ? null : mins), base: score(x, null, false) };
+    r.adj = Math.abs(mins - lmin) >= 0.25;
+    r = holdSide(r);
+    num.value = mins;
+    const v = verdict(r), p = ed.querySelector('.verdict');
+    p.className = 'verdict ' + v.cls; p.innerHTML = v.html;
+    tr.querySelector('.pcol').innerHTML = pCell(r);
+    tr.querySelector('.edgecol').innerHTML = edgeCell(r, Math.max(r.edge, r.base.edge, 0.04));
+  };
+  const commit = mins => {
+    const o = getOv(); mins = clampMin(mins);
+    if (Math.abs(mins - lmin) < 0.25) delete o[id]; else o[id] = mins;
+    setOv(o); renderBoard(); renderMine();
+  };
+  rng.addEventListener('input', e => preview(+e.target.value));
+  rng.addEventListener('change', e => commit(+e.target.value));
+  num.addEventListener('change', e => commit(+e.target.value));
+  ed.querySelectorAll('.step').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); commit(+num.value + +btn.dataset.d); }));
+  ed.querySelector('.reset1').addEventListener('click', e => { e.stopPropagation(); commit(lmin); });
+  ed.querySelectorAll('.bseg button').forEach(btn => btn.addEventListener('click', () => setBoost(+btn.dataset.b)));
+  ed.addEventListener('click', e => e.stopPropagation());
+}
+
+// Older days (before the stat models went to the browser): the saved top 15, as posted
+function renderBoardStatic() {
+  const B = DATA.markets?.[MARKET]?.board || [];
+  $('board-sec').hidden = !B.length;
+  $('board-reset').hidden = true;
+  const top = Math.max(...B.map(r => r.edge), 0.04);
+  $('board').innerHTML = B.map(r => {
+    const dec = r.play === 'bet' ? `<span class="dec-bet">Bet ${r.stake ?? 1}u</span>`
+      : r.play === 'skip' ? `<span class="dec-skip">Skip</span> <span class="small why-sub">${esc(r.why).toLowerCase()}</span>`
+      : `<span class="dec-pass">Pass</span> <span class="small why-sub">under 2%</span>`;
+    return `<tr class="is-${r.play}"><td><div class="name">${esc(r.player)}</div><div class="small">${r.team} vs ${r.opp} · proj ${Number(r.proj).toFixed(1)}</div></td>
+      <td><span class="betcell">${logo(r.book)}${cap(r.side)} ${r.line} <span class="muted">${odds(r.price)}</span></span></td>
+      <td class="r pcol"><span class="pl">P(${cap(r.side)})</span>${pct(r.p, 0)}</td>
+      <td class="r"><span class="edge">${sgn(r.edge * 100)}%<span class="bar"><i style="width:${Math.max(0, r.edge / top * 100)}%"></i><span class="t" style="left:${0.02 / top * 100}%"></span></span></span></td>
+      <td>${dec}</td></tr>`;
+  }).join('');
+}
+
+function renderMine() {
+  const box = $('mine');
+  if (!(props() && TEAMS)) { box.innerHTML = ''; return; }
+  const { bets, anyAdj } = scoredProps();
+  if (!anyAdj) { box.innerHTML = ''; return; }
+  const key = x => (x.PLAYER_ID ?? x.id) + x.side, official = new Set(dayPicks().map(key)), now = new Set(bets.map(key));
+  const added = bets.filter(r => !official.has(key(r))), dropped = dayPicks().filter(p => !now.has(key(p)));
+  const name = x => `<b>${esc(x.player)} ${cap(x.side)} ${x.line}</b>`;
+  const change = !added.length && !dropped.length ? `The ${MARKET} bets are unchanged.`
+    : [added.length ? 'Adds ' + added.map(r => `${name(r)} (${sgn(r.edge * 100)}%)`).join(', ') + '.' : '',
+       dropped.length ? 'Drops ' + dropped.map(name).join(', ') + '.' : ''].join(' ');
+  box.innerHTML = `<div class="mine"><span class="tagline">With your changes</span> ${bets.length ? `${bets.length} ${MARKET} bet${bets.length > 1 ? 's' : ''}` : `no ${MARKET} bets, nothing clears 2%`}. ${change}
+    <button class="textbtn" id="reset-all" type="button">Clear my changes</button></div>`;
+  $('reset-all').onclick = () => { store.set(ovKey(), '{}'); store.set(whoKey(), '{}'); OPEN = null; renderWho(); renderBoard(); renderMine(); };
+}
+
+function renderWhy() {
+  const P = dayPicks();
+  $('why-sec').hidden = !P.length;
+  if (!P.length) return;
+  $('why-title').textContent = P.length > 1 ? 'Why these bets' : 'Why this bet';
+  document.querySelectorAll('#boost button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.b === BOOST)));
+  $('why-list').innerHTML = P.map(whyBlock).join('');
+}
+
+function whyBlock(p) {
+  const L = ledgerFor(p), fin = L && L.points != null && settledResult(L.result) ? L.points : null;
+  const lo = Math.floor(Math.max(0, Math.min(p.proj - p.sigma, p.line - 2, fin ?? 99))), hi = Math.ceil(Math.max(p.proj + p.sigma, p.line + 2, fin ?? 0));
+  const marks = [[p.proj, 'Projection ' + p.proj, 'var(--ink-2)'], [p.line, 'Line ' + p.line, 'var(--accent)']];
+  if (fin != null) marks.push([fin, 'Final ' + fin, L.result === 'win' ? 'var(--win)' : 'var(--loss)']);
+  marks.sort((a, b) => a[0] - b[0]);
+  let lastUp = -1e9;
+  const strip = '<div class="track"></div>' + marks.map(([v, t, c]) => {
+    const x = (v - lo) / (hi - lo) * 100, down = x - lastUp < 18;
+    if (!down) lastUp = x;
+    return down ? `<div class="mk down" style="left:${x}%;color:${c}"><i></i>${t}</div>` : `<div class="mk up" style="left:${x}%;color:${c}">${t}<i></i></div>`;
+  }).join('');
+  let boost = '';
+  if (BOOST) {
+    const bp = boosted(p.price, BOOST), e = p.p - implied(bp), ev = p.p * payout(bp) - (1 - p.p);
+    boost = `<p class="why">With a ${BOOST * 100}% profit boost, ${odds(p.price)} becomes <b>${odds(bp)}</b>, which needs ${pct(implied(bp), 0)}.
+      Edge <b class="${e >= 0.02 ? 'pos' : 'neg'}">${sgn(e * 100)}%</b> (from ${sgn(p.edge * 100)}%), about <b>${sgn(ev, 2)}u</b> expected per 1u bet.
+      <span class="small">Books round boosted odds differently; check the price on your slip.</span></p>`;
+  }
+  const B = (p.books || []).map(b => !BOOST || b.edge === null ? b : { ...b, price: boosted(b.price, BOOST), edge: p.p - implied(boosted(b.price, BOOST)) });
+  const best = Math.max(...B.filter(b => b.edge !== null).map(b => b.edge));
+  const books = B.length ? `<table class="books"><thead><tr><th>${BOOST ? `Each book, ${BOOST * 100}% boost` : 'Same bet at each book'}</th><th class="r">Line</th><th class="r">Price</th><th class="r">Edge</th></tr></thead><tbody>
+    ${B.map(b => `<tr class="${b.edge === best ? 'best' : ''}"><td>${book(b.book, b.link)}</td><td class="r">${b.line}</td>
+      <td class="r">${odds(b.price)}</td><td class="r">${b.edge === null ? '<span class="small">other line</span>' : sgn(b.edge * 100) + '%'}</td></tr>`).join('')}</tbody></table>` : '';
+  return `<div class="whybet"><h3>${esc(p.player)} <span>${cap(p.side)} ${p.line}</span></h3>
+    <div class="strip" aria-hidden="true">${strip}</div>
+    <p class="why">Projects <b>${p.proj}</b> ${UNIT} (± ${p.sigma}) vs a <b>${p.line}</b> line.
+      ${cap(p.side)} wins <b>${pct(p.p, 0)}</b>; ${odds(p.price)} needs ${pct(p.be, 0)}.</p>${boost}${books}</div>`;
+}
+
+function renderDeep() { renderWhy(); renderWho(); renderBoard(); renderMine(); }
 
 /* ---------- history ---------- */
 let SEASONS = null, HSEL = null;
@@ -245,16 +593,22 @@ async function renderHistory() {
 }
 
 /* ---------- views, days ---------- */
+let VIEW = 'today';
 function setView(v) {
-  $('today-view').hidden = v !== 'today'; $('hist').hidden = v !== 'history'; $('daynav').hidden = v !== 'today';
-  $('v-today').setAttribute('aria-pressed', String(v === 'today')); $('v-history').setAttribute('aria-pressed', String(v === 'history'));
+  VIEW = v;
+  $('today-view').hidden = v !== 'today'; $('deep').hidden = v !== 'deep'; $('hist').hidden = v !== 'history';
+  $('daynav').hidden = v === 'history'; $('mine').hidden = v === 'history';
+  for (const k of ['today', 'deep', 'history']) $('v-' + k).setAttribute('aria-pressed', String(v === k));
+  store.set('bb-mview', v);
   if (v === 'history') renderHistory();
 }
 async function show(date) {
   try {
     DATA = date && date !== LATEST ? await getJSON(`history/${date}.json`) : await getJSON('picks.json');
     history.replaceState(null, '', (!date || DATA.date === LATEST ? location.pathname : '#' + date));
-    renderToday();
+    OPEN = null;
+    await loadModel();
+    renderToday(); renderDeep();
     const i = DATES.indexOf(DATA.date);
     $('prev').disabled = i <= 0; $('next').disabled = i < 0 || i >= DATES.length - 1; $('today').disabled = DATA.date === LATEST;
   } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load the data (${esc(e.message)}).</div>`; }
@@ -268,11 +622,12 @@ async function show(date) {
   $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
   $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);
   $('today').onclick = () => show(null);
-  $('v-today').onclick = () => setView('today'); $('v-history').onclick = () => setView('history');
+  $('v-today').onclick = () => setView('today'); $('v-deep').onclick = () => setView('deep'); $('v-history').onclick = () => setView('history');
+  document.querySelectorAll('#boost button').forEach(btn => btn.addEventListener('click', () => setBoost(+btn.dataset.b)));
   const sel = $('state-sel');
   sel.innerHTML += STATES.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
-  sel.value = userState(); sel.onchange = () => { store.set('bb-state', sel.value); renderToday(); };
-  if (wantHistory) setView('history');
+  sel.value = userState(); sel.onchange = () => { store.set('bb-state', sel.value); renderToday(); renderDeep(); };
+  setView(wantHistory ? 'history' : store.get('bb-mview') === 'deep' ? 'deep' : 'today');
 })();
 </script>
 </body>
