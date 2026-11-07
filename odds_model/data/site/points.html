@@ -44,6 +44,8 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 .sitenav a:not(.brand) { font-size: 13.5px; color: var(--muted); text-decoration: none; }
 .sitenav a:not(.brand):hover, .sitenav a[aria-current="page"] { color: var(--ink); }
 .sitenav a[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--accent); padding-bottom: 3px; }
+@media (max-width: 600px) { .sitenav .brand { flex-basis: 100%; margin-bottom: 4px; } .sitenav { gap: 4px 16px; } }
+
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
 .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: #151920; }
 .seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; }
