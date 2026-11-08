@@ -101,6 +101,7 @@
     <section>
       <div class="shead"><h2>Three models, one rule</h2><p>Every prop with a 2%+ edge at the best noon price, 1 unit each.</p></div>
       <div class="rcards" id="results"></div>
+      <p class="rnote" id="corr-note" hidden>2026-27 rebounds and assists use the picks re-made after a model fix for Nov 7 and 8, not the bets posted those days.</p>
       <p class="rnote">Past seasons are backtests: each model trained only on earlier seasons, with the same skips as the live site.
         The line across each backtest bar is its 95% range (± under the units): how far luck alone can move a season with that many bets.
         A range that starts at the bar's left edge reaches below zero. The three model cards share one bar scale; the combined card has its own.</p>
@@ -170,7 +171,8 @@ function renderToday(site) {
 }
 
 async function renderResults(site) {
-  const ledger = site?.record?.ledger || [];
+  const ledger = site?.record?.site_ledger || site?.record?.ledger || [];
+  if (ledger.some(b => b.corrected)) $('corr-note').hidden = false;
   const liveSeason = seasonOf(todayET());
   const past = await Promise.all(MODELS.map(M => getJSON(M.file).then(d => d.seasons).catch(() => [])));
   const seasons = [...new Set([liveSeason, ...past.flat().map(s => s.season)])].sort().reverse();

@@ -190,7 +190,7 @@ function renderToday() {
 
   const S = LIVE.filter(b => b.date <= DATA.date && (b.result === 'win' || b.result === 'loss'));
   const t = summary(S);
-  $('season-sub').textContent = S.length ? `${S.length} settled ${MARKET} bets since ${short(S[0].date)}` : '';
+  $('season-sub').textContent = S.length ? `${S.length} settled ${MARKET} bets since ${short(S[0].date)}${S.some(b => b.corrected) ? ', with Nov 7 and 8 as re-made after a model fix' : ''}` : '';
   $('stats').innerHTML = S.length ? figs(t, S.length) : '<p class="muted">The record starts with the first settled bet.</p>';
   if (S.length) drawChart(S, $('chart')); else $('chart').innerHTML = '';
 }
@@ -587,7 +587,7 @@ const seasonOf = d => { const [y, mo] = d.split('-').map(Number), s = mo >= 8 ? 
 async function renderHistory() {
   if (!SEASONS) {
     const past = (await getJSON(`seasons_${MARKET}.json`).catch(() => ({ seasons: [] }))).seasons;
-    SEASONS = [{ season: seasonOf(LATEST || new Date().toISOString().slice(0, 10)), kind: 'live', note: `Live: the ${MARKET} bets the site posted, at the noon price.`, bets: LIVE },
+    SEASONS = [{ season: seasonOf(LATEST || new Date().toISOString().slice(0, 10)), kind: 'live', note: `Live: the ${MARKET} bets the site posted, at the noon price.${LIVE.some(b => b.corrected) ? ' Nov 7 and 8 show the picks re-made after a model fix, not the bets posted those days.' : ''}`, bets: LIVE },
                ...past].map(s => ({ ...s, bets: [...s.bets].sort((a, b) => a.date.localeCompare(b.date)) }));
     HSEL = HSEL || SEASONS[0].kind + SEASONS[0].season;
   }
@@ -613,7 +613,7 @@ async function renderHistory() {
     return `<details class="month"><summary><span class="t">${monthName(mo)}</span><span class="m">${w}–${l} · <span class="${cls(u)}">${sgn(u, 2)}u</span></span></summary>
       <table class="plays"><tbody>${bets.map(b => `<tr><td class="d">${short(b.date)}</td>
         <td><div class="name">${esc(b.player)} <span class="muted" style="font-weight:400">${cap(b.side)} ${b.line}</span></div>
-          <div class="small">${esc(b.team)} vs ${esc(b.opp ?? b.opponent)} · ${odds(b.price)} ${esc(b.book)} · edge ${sgn(b.edge * 100)}%${b.points != null ? ` · ${b.points} ${UNIT}` : ''}</div></td>
+          <div class="small">${esc(b.team)} vs ${esc(b.opp ?? b.opponent)} · ${odds(b.price)} ${esc(b.book)} · edge ${sgn(b.edge * 100)}%${b.points != null ? ` · ${b.points} ${UNIT}` : ''}${b.corrected ? ' · corrected' : ''}</div></td>
         <td class="r"><span class="res ${b.result === 'win' ? 'win' : b.result === 'loss' ? 'loss' : 'other'}">${{ win: 'Won', loss: 'Lost', void: 'Void', push: 'Push' }[b.result] || 'Pending'}</span>
           <div class="small ${settledResult(b.result) ? cls(b.units) : ''}">${settledResult(b.result) ? sgn(b.units, 2) + 'u' : ''}</div></td></tr>`).join('')}</tbody></table></details>`;
   }).join('') || '<p class="muted">No bets yet this season.</p>';
@@ -644,7 +644,7 @@ async function show(date) {
   const wantHistory = location.search.includes('view=history');           // read before show() rewrites the address
   [$('rule').textContent, $('rulenote').textContent] = RULE;
   try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
-  try { const p = await getJSON('picks.json'); LATEST = p.date; LIVE = (p.record?.ledger || []).filter(mine).sort((a, b) => a.date.localeCompare(b.date)); } catch (e) {}
+  try { const p = await getJSON('picks.json'); LATEST = p.date; LIVE = (p.record?.site_ledger || p.record?.ledger || []).filter(mine).sort((a, b) => a.date.localeCompare(b.date)); } catch (e) {}
   await show(location.hash.slice(1) || null);
   $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
   $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);

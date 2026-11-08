@@ -1,0 +1,11 @@
+date,player,PLAYER_ID,team,opponent,event_id,commence_time,side,line,price,book,p_side,edge,stake,close_line,close_novig_side,clv,points,result,units,market
+2026-11-07,Nikola Jokic,203999,DEN,IND,e76682ca6c25a37b0a53cec226b91aab,2026-11-07T22:10:00Z,UNDER,11.5,110,FanDuel,0.5093,0.0331,1.0,,,,13.0,loss,-1.0,rebounds
+2026-11-07,Jase Richardson,1642859,ORL,GSW,39099dc03208d0771daaab5f7993478a,2026-11-08T01:40:00Z,UNDER,2.5,100,BetMGM,0.5309,0.0309,1.0,,,,4.0,loss,-1.0,rebounds
+2026-11-07,Khaman Maluach,1642863,PHX,HOU,af8d920f175d73f12933c64ae296573f,2026-11-08T02:10:00Z,UNDER,5.5,-151,DraftKings,0.6273,0.0257,1.0,,,,10.0,loss,-1.0,rebounds
+2026-11-07,Brandin Podziemski,1641764,GSW,ORL,39099dc03208d0771daaab5f7993478a,2026-11-08T01:40:00Z,UNDER,5.5,-112,FanDuel,0.5493,0.021,1.0,,,,7.0,loss,-1.0,rebounds
+2026-11-08,Paul Reed,1630194,DET,LAL,182e2b5349fa0ff4ad3c0e8359c1a9a0,2026-11-08T23:10:00Z,UNDER,7.5,102,Caesars,0.5563,0.0612,1.0,,,,,,,rebounds
+2026-11-08,Josh Giddey,1630581,CHI,PHI,a5d2d9c68b7446860de658aa4bc33c5b,2026-11-08T20:40:00Z,UNDER,6.5,-118,FanDuel,0.5795,0.0383,1.0,,,,,,,rebounds
+2026-11-08,Caleb Martin,1628997,DAL,BKN,c5b6599e8e4949749798dcdadceb68d4,2026-11-09T00:40:00Z,UNDER,2.5,110,DraftKings,0.498,0.0218,1.0,,,,,,,rebounds
+2026-11-08,Dean Wade,1629731,PHI,CHI,a5d2d9c68b7446860de658aa4bc33c5b,2026-11-08T20:40:00Z,UNDER,3.5,116,DraftKings,0.4845,0.0215,1.0,,,,,,,rebounds
+2026-11-08,Duncan Robinson,1629130,DET,LAL,182e2b5349fa0ff4ad3c0e8359c1a9a0,2026-11-08T23:10:00Z,UNDER,2.5,-122,FanDuel,0.5703,0.0208,1.0,,,,,,,rebounds
+2026-11-08,Paul Reed,1630194,DET,LAL,182e2b5349fa0ff4ad3c0e8359c1a9a0,2026-11-08T23:10:00Z,UNDER,2.5,-145,BetMGM,0.6252,0.0334,1.0,,,,,,,assists

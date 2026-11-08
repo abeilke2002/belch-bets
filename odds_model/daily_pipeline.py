@@ -58,6 +58,7 @@ STATUSES = {'Available', 'Probable', 'Questionable', 'Doubtful', 'Out'}
 LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'commence_time', 'side', 'line', 'price',
             'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units', 'market']
 STAT_MARKETS = {'rebounds': 'reb', 'assists': 'ast'}          # besides points; 'points' in the log = the stat's actual value
+CORRECTED = DATA / 'live' / 'corrected_bets.csv'               # site-only: stat-market picks re-made after a model fix, by date
 
 
 class OverrideError(ValueError):
@@ -694,11 +695,19 @@ def slate_payload(schedule, board, f, status, sources, unmatched, odds_note, gam
 
 # ---------------------------------------------------------------- log, close, results
 
-def read_log(paths):
-    log = pd.read_csv(paths.log) if paths.log.exists() else pd.DataFrame(columns=LOG_COLS)
+def read_bets(path):
+    log = pd.read_csv(path) if path.exists() else pd.DataFrame(columns=LOG_COLS)
     log['market'] = log['market'].fillna('points') if 'market' in log else 'points'
     return log.astype({'result': object, 'close_line': float, 'close_novig_side': float, 'clv': float,
                        'points': float, 'units': float})
+
+
+def read_log(paths):
+    return read_bets(paths.log)
+
+
+def uses_corrections(paths):
+    return paths.log.parent == DATA and CORRECTED.exists()             # the real log only, never a replay
 
 
 def log_bets(paths, day, bets):
@@ -755,8 +764,16 @@ def stat_box():
 
 
 def settle(paths, games):
+    """Grade the posted bets, and the corrected picks the site shows in their place."""
+    n = settle_file(paths.log, games)
+    if uses_corrections(paths):
+        settle_file(CORRECTED, games)
+    return n
+
+
+def settle_file(path, games):
     """Grade unsettled bets whose games are in the box scores (DNP = void)."""
-    log = read_log(paths)
+    log = read_bets(path)
     if log.empty:
         return 0
     n = 0
@@ -780,7 +797,7 @@ def settle(paths, games):
             log.loc[i, 'units'] = 0.0 if pts == b['line'] else \
                 b['stake'] * (float(american_to_decimal(b['price'])) - 1 if won else -1)
         n += 1
-    log.to_csv(paths.log, index=False)
+    log.to_csv(path, index=False)
     return n
 
 
@@ -840,15 +857,27 @@ def run_results():
 
 
 def record(paths):
-    """Season ledger for the website: every bet in order, settled or pending."""
+    """Season ledgers for the website. 'ledger': every bet as posted, settled or pending (X's records use this one).
+    'site_ledger', when there are corrected picks: the same, with those dates' stat-market bets replaced by the picks
+    re-made after a model fix, each flagged 'corrected'; the site's season history and home bars use it."""
     log = read_log(paths)
     if log.empty:
         return {'ledger': []}
-    led = log.sort_values('date').assign(won=lambda x: x['result'].map({'win': True, 'loss': False}))
     cols = ['date', 'player', 'team', 'opponent', 'market', 'side', 'line', 'price', 'book', 'edge', 'stake', 'result', 'won',
             'points', 'units', 'close_line', 'clv']
-    return {'ledger': json.loads(led[cols].rename(columns={'opponent': 'opp', 'close_line': 'close'})
-                                 .to_json(orient='records'))}
+    rows = lambda x: json.loads(x.sort_values('date', kind='stable').assign(won=lambda y: y['result'].map({'win': True, 'loss': False}))[cols]
+                                .rename(columns={'opponent': 'opp', 'close_line': 'close'}).to_json(orient='records'))
+    out = {'ledger': rows(log)}
+    if uses_corrections(paths):
+        fix = read_bets(CORRECTED)
+        keep = log[~(log['date'].astype(str).isin(set(fix['date'].astype(str))) & log['market'].isin(STAT_MARKETS))]
+        site = rows(pd.concat([keep.assign(corrected=False), fix.assign(corrected=True)], ignore_index=True).astype({'corrected': bool}))
+        flagged = fix.assign(key=fix['date'].astype(str) + fix['player'] + fix['market'] + fix['side'])
+        keys = set(flagged['key'])
+        for b in site:
+            b['corrected'] = (str(b['date']) + b['player'] + b['market'] + b['side']) in keys
+        out['site_ledger'] = site
+    return out
 
 
 def write_site(paths, site):
