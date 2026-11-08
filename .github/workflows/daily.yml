@@ -13,11 +13,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: picks, close, results, remove (drop a bet, names in override), announce (post the text in args to X) or xauth
+        description: picks, close, results, remove (drop a bet, names in override), announce (post the text in args to X), xauth or xcheck (test the X sign-in, posts nothing)
         required: true
         default: picks
         type: choice
-        options: [picks, close, results, remove, announce, xauth]
+        options: [picks, close, results, remove, announce, xauth, xcheck]
       override:
         description: 'picks: fix a status and rerun, e.g. Luka Doncic=Available. remove: bets to drop, e.g. Daniel Gafford=price moved'
         required: false
@@ -76,7 +76,7 @@ jobs:
         with: { node-version: '20' }
       - run: pip install -q -r ../requirements.txt
       - name: Build features from the box scores
-        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce' && steps.mode.outputs.mode != 'xauth' && steps.mode.outputs.mode != 'remove'
+        if: steps.mode.outputs.mode != 'close' && steps.mode.outputs.mode != 'announce' && steps.mode.outputs.mode != 'xauth' && steps.mode.outputs.mode != 'xcheck' && steps.mode.outputs.mode != 'remove'
         run: |
           python build_features.py > /dev/null
           python injury_reports.py > /dev/null       # data/noon_injuries.parquet: who was on each game's report (teammates returning)
@@ -88,6 +88,7 @@ jobs:
         run: |
           if [ "${{ steps.mode.outputs.mode }}" = announce ]; then python post_x.py --announce
           elif [ "${{ steps.mode.outputs.mode }}" = xauth ]; then python post_x.py --authorize
+          elif [ "${{ steps.mode.outputs.mode }}" = xcheck ]; then python post_x.py --check
           elif [ "${{ steps.mode.outputs.mode }}" = close ]; then python daily_pipeline.py close --window 20 ${{ inputs.args }}
           elif [ "${{ steps.mode.outputs.mode }}" = picks ]; then python daily_pipeline.py picks $BACKUP ${{ inputs.args }}
           else python daily_pipeline.py ${{ steps.mode.outputs.mode }} ${{ inputs.args }}; fi

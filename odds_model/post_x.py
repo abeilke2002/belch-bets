@@ -18,6 +18,7 @@ no site link (the site is private, and a link costs more per post).
     ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
     ANNOUNCE='picks' python post_x.py --announce    # repost today's picks after a rerun changed them ("Updated")
     python post_x.py --connect       # on your computer: approve posting (text and images) in X, saves X_REFRESH_TOKEN
+    python post_x.py --check         # sign in and report the account and permissions, post nothing (workflow 'xcheck')
 Images (x_cards.py) need the token's media.write scope; without it, or if an upload fails, posts go out as text.
 """
 import base64
@@ -376,6 +377,15 @@ if __name__ == '__main__':
     site = json.loads((DATA / 'site' / 'picks.json').read_text())
     if '--connect' in sys.argv:                           # on your own computer: authorize and store the token
         connect()
+    elif '--check' in sys.argv:                             # workflow 'xcheck' mode: sign in like a post would, post nothing
+        import requests
+        auth = auth_header()
+        if not auth:
+            print('X check: keys not set'); sys.exit(1)
+        me = requests.get('https://api.x.com/2/users/me', headers={'Authorization': auth}, timeout=30)
+        user = me.json().get('data', {}).get('username') if me.status_code == 200 else f'error {me.status_code}: {me.text[:150]}'
+        print(f'X check: signed in as @{user}; token scopes: {SCOPES}')
+        print('X check: images', 'ENABLED (media.write)' if SCOPES and 'media.write' in SCOPES else 'NOT enabled: posts go out as text')
     elif '--authorize' in sys.argv:                         # workflow 'xauth' mode: $ANNOUNCE = "<code> <verifier>"
         code, verifier = os.environ.get('ANNOUNCE', '').split()
         print('X: authorized, token scopes:', authorize(code, verifier))
