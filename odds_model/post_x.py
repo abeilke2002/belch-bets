@@ -8,11 +8,13 @@ Credentials (GitHub secrets), either kind; without them nothing is posted:
     encrypted with X_TOKEN_KEY in data/live/x_token.enc (committed by the run like the rest of data/live). Setting a
     new X_REFRESH_TOKEN secret (re-authorising) takes precedence over the saved one.
   OAuth 1.0a: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET.
-Every bet is reported, wins and losses, with the season record on both posts. Each post goes out once
-(data/live/x_posted.json); nothing on days without a bet; results only once every bet of the night is settled;
+One post per model (points, rebounds, assists), each with that model's season record and the overall record; a model
+with no bets gets a 'no bets today' post saying why. Every bet is reported, wins and losses. Each post goes out once
+(data/live/x_posted.json); nothing on days without games; results (per model with bets) only once that model's night
+is settled;
 no site link (the site is private, and a link costs more per post).
 
-    python post_x.py --dry-run       # print what today's two posts would say
+    python post_x.py --dry-run       # print what today's posts would say
     ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
     ANNOUNCE='picks' python post_x.py --announce    # repost today's picks after a rerun changed them ("Updated")
     python post_x.py --connect       # on your computer: approve posting in X, saves the X_REFRESH_TOKEN secret
@@ -81,15 +83,43 @@ def pick_block(p):
     return f"{p['player']} {side(p)} {p['line']:g} {stat(p)} ({p['price']:+d} {BOOK.get(p['book'], p['book'])})\n{why}"
 
 
-def picks_posts(site, note=''):
-    """Today's bets, best edge first, each with its reason. The first post carries the date, stake and season record;
-    bets that don't fit continue in replies (a thread)."""
-    bets = sorted(site.get('picks') or [], key=lambda p: -p['edge'])
-    ledger = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] < site['date']]
+MODELS = [('points', 'Points'), ('rebounds', 'Rebounds'), ('assists', 'Assists')]
+market_of = lambda b: b.get('market') or 'points'
+
+
+def records_tail(site, market, before=True):
+    """'Rebounds season 3-1 · +1.8u' and 'All models 12-12 · -0.5u' over settled bets (before the page day, or through it)."""
+    led = [b for b in (site.get('record') or {}).get('ledger', []) if (b['date'] < site['date'] if before else b['date'] <= site['date'])]
+    name = dict(MODELS)[market]
+    mine = [b for b in led if market_of(b) == market]
+    out = [f"{name} season {record(mine, pct=False)}" if any(b.get('result') in SETTLED for b in mine) else f"{name} season 0-0"]
+    if any(b.get('result') in SETTLED for b in led):
+        out.append(f"All models {record(led, pct=False)}")
+    return out
+
+
+def no_bets_reason(site, market):
+    """Why a model has no bets today, in a few words."""
+    if site.get('message', '').startswith('No bets: the site sits out'):
+        return 'the site sits out the last two weeks of the season'
+    board = site.get('board') if market == 'points' else ((site.get('markets') or {}).get(market) or {}).get('board')
+    if not board:
+        return f'no {market} lines posted for tonight\'s games'
+    top = [r for r in board if r.get('play') != 'skip']
+    return f"best eligible edge {max(r['edge'] for r in top):+.1%}, under the 2% minimum" if top else 'every prop skipped (injury report, back-to-back)'
+
+
+def picks_posts(site, market, note=''):
+    """One model's bets today, best edge first, each with its reason; that model's season record and the overall record.
+    Bets that don't fit continue in replies (a thread). No bets: one post saying so, and why."""
+    name = dict(MODELS)[market]
+    bets = sorted([p for p in site.get('picks') or [] if market_of(p) == market], key=lambda p: -p['edge'])
+    head = f"The Noon Line · {name} · {day_label(site['date'])}{note}"
+    recs = records_tail(site, market)
+    if not bets:
+        return ['\n\n'.join([head, f"No {market} bets today: {no_bets_reason(site, market)}.", '\n'.join(recs + [TAGS_PICKS])])]
     stake = f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"
-    tail = stake + (f" · Season {record(ledger, pct=False)}" if any(b.get('result') in SETTLED for b in ledger) else '')
-    tail += '\n' + TAGS_PICKS
-    head = f"The Noon Line · {day_label(site['date'])}{note}"
+    tail = '\n'.join([f"{stake} · {recs[0]}", *recs[1:], TAGS_PICKS])
     blocks, posts = [pick_block(p) for p in bets], []
     cur = [head]
     for blk in blocks:
@@ -106,12 +136,13 @@ def picks_posts(site, note=''):
 
 
 def picks_text(site):
-    return '\n\n---\n\n'.join(picks_posts(site))             # for --dry-run
+    return '\n\n=====\n\n'.join('\n\n---\n\n'.join(picks_posts(site, m)) for m, _ in MODELS)     # for --dry-run
 
 
-def night(site):
-    """The page day's bets from the ledger, or [] if none or any is still unsettled."""
-    bets = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] == site['date']]
+def night(site, market=None):
+    """The page day's bets (one model's, or all) from the ledger, or [] if none or any is still unsettled."""
+    bets = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] == site['date']
+            and (market is None or market_of(b) == market)]
     return bets if bets and all(b.get('result') in SETTLED for b in bets) else []
 
 
@@ -133,15 +164,14 @@ def week_text(ledger, monday):
     return '\n'.join(['The Noon Line · weekly scorecard', ''] + lines + ['', 'Every bet counted, wins and losses.', TAGS_RESULTS])[:LIMIT]
 
 
-def results_text(site):
-    """Every bet from the night with its points and result, the night's total and the season's."""
+def results_text(site, market):
+    """One model's bets from the night with the stat and result, the night's total, that model's season and the overall."""
     word = {'win': 'W', 'loss': 'L', 'push': 'push', 'void': 'void, DNP'}
-    bets = night(site)
+    bets = night(site, market)
     lines = [f"{b['player']} {side(b)} {b['line']:g} {stat(b)}: " + (f"{b['points']:g}, " if b.get('points') is not None else '')
              + word[b['result']] for b in bets]
-    ledger = [b for b in site['record']['ledger'] if b['date'] <= site['date']]
-    return fit(f"The Noon Line results · {day_label(site['date'])}", lines,
-               [f"Night: {record(bets, pct=False)}", f"Season: {record(ledger)}", '', TAGS_RESULTS])
+    return fit(f"The Noon Line · {dict(MODELS)[market]} results · {day_label(site['date'])}", lines,
+               [f"Night: {record(bets, pct=False)}", *records_tail(site, market, before=False), '', TAGS_RESULTS])
 
 
 def oauth_header(method, url, keys, params=None):
@@ -270,16 +300,26 @@ def post_once(key, text):
         return f'X: post failed ({type(e).__name__}: {e})'
 
 
+def posted_keys():
+    return json.loads(POSTED.read_text()) if POSTED.exists() else {}
+
+
 def post_picks(site):
-    if not site.get('picks'):
-        return 'X: no bets today, nothing posted'
-    return post_once(site['date'], picks_posts(site))         # key stays the bare date (posts made before results existed)
+    """Noon: one post per model, bets or not (nothing on days without games or when the run failed)."""
+    if not site.get('games') or site.get('status') == 'error':
+        return 'X: no games or no picks today, nothing posted'
+    if site['date'] in posted_keys():                   # posted before the per-model format: don't repost the day
+        return f"X: already posted {site['date']}"
+    return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m)) for m, _ in MODELS)
 
 
 def post_results(site, today=None):
     """Last night's results; on Mondays also the weekly scorecard for the 7 days before."""
-    out = [post_once('results:' + site['date'], results_text(site)) if night(site)
-           else 'X: no settled bets for that night, nothing posted']
+    if 'results:' + site['date'] in posted_keys():        # posted before the per-model format
+        out = [f"X: already posted results:{site['date']}"]
+    else:
+        out = [post_once(f"results:{site['date']}:{m}", results_text(site, m)) for m, _ in MODELS if night(site, m)] \
+              or ['X: no settled bets for that night, nothing posted']
     today = today or datetime.now(ZoneInfo('America/New_York')).date()
     if today.weekday() == 0:
         monday, ledger = today.isoformat(), (site.get('record') or {}).get('ledger', [])
@@ -299,13 +339,15 @@ if __name__ == '__main__':
     elif '--announce' in sys.argv:                          # one-off post (workflow 'announce' mode), text from $ANNOUNCE
         text = os.environ.get('ANNOUNCE', '').strip()
         if text.lower() == 'picks':                       # the day's picks changed after the noon post
-            posts = picks_posts(site, ' · Updated')
-            print(post_once(f"{site['date']}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts))
+            for m, _ in MODELS:                            # one update per model, each distinct version posted once
+                posts = picks_posts(site, m, ' · Updated')
+                print(post_once(f"{site['date']}:{m}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts))
             sys.exit()
         print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
     elif '--dry-run' in sys.argv:
-        print(picks_text(site) if site.get('picks') else 'picks: no bets today', '\n---')
-        print(results_text(site) if night(site) else 'results: nothing settled for that night', '\n---')
+        print(picks_text(site), '\n=====')
+        for m, _ in MODELS:
+            print(results_text(site, m) if night(site, m) else f'results ({m}): nothing settled for that night', '\n---')
         print(week_text(site['record']['ledger'], sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
     else:
         print(post_picks(site))
