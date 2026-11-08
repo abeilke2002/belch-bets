@@ -150,14 +150,7 @@ def results_image(site, market):
     """PNG for one model's results post, or None."""
     try:
         import x_cards
-        bets = night(site, market)
-        led = sorted([b for b in (site.get('record') or {}).get('ledger', []) if b['date'] <= site['date']
-                      and market_of(b) == market and b.get('result') in SETTLED], key=lambda b: b['date'])
-        run, tot = [], 0.0
-        for b in led:
-            tot += b.get('units') or 0
-            run.append(tot)
-        return x_cards.results_card(market, day_label(site['date']), bets, records_tail(site, market, before=False), run)
+        return x_cards.results_card(market, day_label(site['date']), night(site, market), records_tail(site, market, before=False))
     except Exception:
         return None
 

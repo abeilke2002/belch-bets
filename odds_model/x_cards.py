@@ -2,9 +2,10 @@
 
     python x_cards.py            # writes today's cards to data/x_cards/*.png to look at
 
-1200x675 PNG (X's 16:9), the site's dark theme and model colors. Picks: each bet with the projection (and its
-± range) against the line on a small number line, and the chance to hit. Results: each bet's final against the
-line, won or lost, the night and season records, and the model's running units this season.
+1200x675 PNG (X's 16:9), the site's dark theme and model colors, drawn with matplotlib from the bets themselves.
+Picks (the bet card): each bet with the projection (and its ± range) against the line on a small number line, and the
+chance to hit next to the break-even. Results (the receipts): the night's record and units, each bet's final and
+whether it won.
 """
 import io
 
@@ -106,45 +107,30 @@ def picks_card(market, date_label, picks, records):
     return _png(fig)
 
 
-def results_card(market, date_label, bets, records, season_units):
-    """PNG bytes for one model's settled night, or None. season_units: the model's running units this season."""
+def results_card(market, date_label, bets, records):
+    """PNG bytes for one model's settled night (the receipts: each bet, its final, won or lost), or None."""
     if not bets:
         return None
     fig = _fig()
     w = sum(b['result'] == 'win' for b in bets); l = sum(b['result'] == 'loss' for b in bets)
     u = sum(b.get('units') or 0 for b in bets)
     _header(fig, market, f'{NAME[market]} results', date_label)
-    _px(fig, 48, 172, f'{w}-{l}', 44, INK, 'bold')
-    _px(fig, 48 + 28 * len(f'{w}-{l}') + 14, 172, f"{'+' if u >= 0 else '−'}{abs(u):.2f}u", 30, WIN if u >= 0 else LOSS, 'bold')
-    _px(fig, 48, 200, 'tonight', 13, MUTED)
-    shown = bets[:MAX_ROWS]
-    top, bottom = 228, H - 92
-    step = min(80, (bottom - top) / len(shown))
+    _px(fig, W / 2, 200, f"{w}-{l}   {'+' if u >= 0 else '−'}{abs(u):.2f}u", 40, WIN if u >= 0 else LOSS, 'bold', ha='center')
+    shown = bets[:MAX_ROWS + 1] if len(bets) == MAX_ROWS + 1 else bets[:MAX_ROWS]
+    top, bottom = 250, H - 80
+    step = min(76, (bottom - top) / len(shown))
+    size = 24 if step >= 64 else 20
     for i, b in enumerate(shown):
-        y = top + step * (i + 0.5)
-        side = 'U' if b['side'] == 'UNDER' else 'O'
+        y = top + step * (i + 0.5) + size / 3
         res = b['result']
         c = WIN if res == 'win' else LOSS if res == 'loss' else MUTED
-        _px(fig, 48, y + 6, b['player'], 19, INK, 'bold')
-        _px(fig, 330, y + 6, f"{side} {b['line']:g}", 17, INK2)
-        if b.get('points') is not None:
-            lo, hi = _bounds([b['line'], b['points']], pad=1.5)
-            _strip(fig, 420, 700, y, lo, hi, [(b['line'], 'line', f"{b['line']:g}", ACCENT),
-                                              (b['points'], 'proj', f"{b['points']:g}", c)])
-        tag = {'win': 'W', 'loss': 'L', 'push': 'PUSH', 'void': 'VOID'}.get(res, res)
-        _px(fig, 740, y + 7, tag, 19, c, 'bold')
-    # running units for the model's season, bottom right
-    if len(season_units) >= 3:
-        ax = fig.add_axes([800 / W, 1 - (H - 100) / H, (W - 48 - 800) / W, (H - 100 - 210) / H])
-        xs = range(len(season_units) + 1); ys = [0] + list(season_units)
-        ax.axhline(0, color=LINE, lw=1)
-        ax.plot(xs, ys, color=COLOR[market], lw=2)
-        ax.fill_between(xs, ys, 0, color=COLOR[market], alpha=0.12, lw=0)
-        ax.axis('off')
-        ax.text(0, 1.04, f"{NAME[market]} season, running units", transform=ax.transAxes, fontsize=12 * 72 / DPI, color=MUTED)
-        ax.text(1, 1.04, f"{'+' if ys[-1] >= 0 else '−'}{abs(ys[-1]):.1f}u", transform=ax.transAxes, ha='right',
-                fontsize=13 * 72 / DPI, color=WIN if ys[-1] >= 0 else LOSS, weight='bold')
-    more = f'  ·  +{len(bets) - MAX_ROWS} more' if len(bets) > MAX_ROWS else ''
+        side = 'U' if b['side'] == 'UNDER' else 'O'
+        _px(fig, 120, y, b['player'], size, INK, 'bold')
+        _px(fig, 560, y, f"{side} {b['line']:g}", size - 2, INK2)
+        final = f"{b['points']:g} {UNIT[market]}" if b.get('points') is not None else 'DNP'
+        _px(fig, 760, y, final, size, INK, 'bold')
+        _px(fig, 1000, y, {'win': 'WON', 'loss': 'LOST', 'push': 'PUSH', 'void': 'VOID'}.get(res, res.upper()), size - 2, c, 'bold')
+    more = f'  ·  +{len(bets) - len(shown)} more' if len(bets) > len(shown) else ''
     _px(fig, 48, H - 40, '   ·   '.join(records) + more, 15, INK2)
     return _png(fig)
 
