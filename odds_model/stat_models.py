@@ -73,7 +73,7 @@ def train():
 
 def history(day):
     """Played rows (this season and last) with rebounds/assists, before `day`."""
-    rows = load_rows().merge(SB.box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='inner')
+    rows = load_rows(min_gp=0).merge(SB.box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='inner')   # first games count
     seasons = sorted(rows['season'].unique())
     from predict_today import season_of
     cur = season_of(day)

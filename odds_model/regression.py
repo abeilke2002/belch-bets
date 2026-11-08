@@ -74,13 +74,15 @@ def fit(X, y):
     return lgb.LGBMRegressor(**params).fit(X, y)
 
 
-def load_rows():
+def load_rows(min_gp=1):
+    """Played rows. min_gp=1 (modelling rows) drops each player's first game of a season, which has no history to
+    predict from; min_gp=0 keeps it, for building averages (a player's first game still counts toward them)."""
     df = pd.read_parquet(DATA / 'player_games.parquet')
     ctx = DATA / 'game_context.parquet'                 # spread/total, teammates returning, opponent absences
     if ctx.exists():
         df = df.drop(columns=[c for c in pd.read_parquet(ctx).columns if c not in ('PLAYER_ID', 'GAME_ID')], errors='ignore') \
                .merge(pd.read_parquet(ctx), on=['PLAYER_ID', 'GAME_ID'], how='left')
-    return df[df['played'] & (df['gp'] >= 1)].reset_index(drop=True)
+    return df[df['played'] & (df['gp'] >= min_gp)].reset_index(drop=True)
 
 
 def minutes_for_season(df, s, features=None):

@@ -165,7 +165,7 @@ def build(stat_list, noon_inputs=True):
     g = pd.read_parquet(DATA / 'player_games.parquet')
     played_all = g[g['played']].merge(box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='left')
     played_all = played_all.dropna(subset=['reb', 'ast'])         # 2026-27 (ESPN) rows have no rebounds/assists yet
-    df = load_rows().merge(box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='inner')
+    df = load_rows(min_gp=0).merge(box_stats(), on=['GAME_ID', 'PLAYER_ID'], how='inner')   # first games count toward averages
     df = player_stat_features(df)
     df = df.merge(team_context(played_all), on=['GAME_ID', 'TEAM_ID'], how='left')
     opp = team_context(played_all).rename(columns={'TEAM_ID': 'OPP_ID'})[
@@ -185,7 +185,7 @@ def build(stat_list, noon_inputs=True):
         usual[f'{c}_usual'] = gg[c].transform(lambda x: x.shift(1).expanding().mean())
     hind = add_new_absence(df, usual)
     if not noon_inputs:
-        return hind, None
+        return hind[hind['gp'] >= 1].reset_index(drop=True), None         # a first game has no history to predict from
 
     # noon inputs: the noon report (Questionable at half) for teammates-out, everything else unchanged
     rep = pd.read_parquet(DATA / 'noon_injuries.parquet')
@@ -197,7 +197,7 @@ def build(stat_list, noon_inputs=True):
     noon['out_fga_share'] = noon['out_fga'] / noon['team_fga_pg']
     noon = noon_positions(noon, g, rows)                       # position absences from the report too
     noon = add_new_absence(add_redistribution(noon), usual)
-    return hind, noon
+    return hind[hind['gp'] >= 1].reset_index(drop=True), noon[noon['gp'] >= 1].reset_index(drop=True)
 
 
 STAT_FEATURES = {
