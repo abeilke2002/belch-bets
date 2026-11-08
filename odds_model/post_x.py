@@ -17,7 +17,8 @@ no site link (the site is private, and a link costs more per post).
     python post_x.py --dry-run       # print what today's posts would say
     ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
     ANNOUNCE='picks' python post_x.py --announce    # repost today's picks after a rerun changed them ("Updated")
-    python post_x.py --connect       # on your computer: approve posting in X, saves the X_REFRESH_TOKEN secret
+    python post_x.py --connect       # on your computer: approve posting (text and images) in X, saves X_REFRESH_TOKEN
+Images (x_cards.py) need the token's media.write scope; without it, or if an upload fails, posts go out as text.
 """
 import base64
 import hashlib
@@ -135,6 +136,32 @@ def picks_posts(site, market, note=''):
     return posts
 
 
+def picks_image(site, market):
+    """PNG for one model's picks post, or None (no bets, or the image can't be drawn)."""
+    try:
+        import x_cards
+        bets = sorted([p for p in site.get('picks') or [] if market_of(p) == market], key=lambda p: -p['edge'])
+        return x_cards.picks_card(market, day_label(site['date']), bets, records_tail(site, market))
+    except Exception:
+        return None
+
+
+def results_image(site, market):
+    """PNG for one model's results post, or None."""
+    try:
+        import x_cards
+        bets = night(site, market)
+        led = sorted([b for b in (site.get('record') or {}).get('ledger', []) if b['date'] <= site['date']
+                      and market_of(b) == market and b.get('result') in SETTLED], key=lambda b: b['date'])
+        run, tot = [], 0.0
+        for b in led:
+            tot += b.get('units') or 0
+            run.append(tot)
+        return x_cards.results_card(market, day_label(site['date']), bets, records_tail(site, market, before=False), run)
+    except Exception:
+        return None
+
+
 def picks_text(site):
     return '\n\n=====\n\n'.join('\n\n---\n\n'.join(picks_posts(site, m)) for m, _ in MODELS)     # for --dry-run
 
@@ -242,7 +269,7 @@ def connect(repo='abeilke2002/belch-bets', client_id='Ri1IdEtoWXFPckxteEFkR1RrRU
     verifier = secrets.token_urlsafe(48)
     link = ('https://x.com/i/oauth2/authorize?' + urllib.parse.urlencode({
         'response_type': 'code', 'client_id': client_id, 'redirect_uri': REDIRECT, 'state': 'noonline',
-        'scope': 'tweet.read tweet.write users.read offline.access', 'code_challenge': verifier,
+        'scope': 'tweet.read tweet.write users.read offline.access media.write', 'code_challenge': verifier,
         'code_challenge_method': 'plain'}, quote_via=urllib.parse.quote))
     print('\nOpening X. Click "Authorize app", then paste the address you land on here, right away.\n' + link + '\n')
     webbrowser.open(link)
@@ -258,6 +285,8 @@ def connect(repo='abeilke2002/belch-bets', client_id='Ri1IdEtoWXFPckxteEFkR1RrRU
     if 'tweet.write' not in tok.get('scope', ''):
         print('Approved, but without posting permission (scopes: ' + tok.get('scope', '') + '). Nothing saved.')
         return
+    if 'media.write' not in tok.get('scope', ''):
+        print('Note: approved without image permission (media.write); posts will go out as text only.')
     subprocess.run(['gh', 'secret', 'set', 'X_REFRESH_TOKEN', '-R', repo], input=tok['refresh_token'], text=True, check=True)
     print('Done: X_REFRESH_TOKEN updated with a token that can post (' + tok['scope'] + ').')
 
@@ -270,9 +299,27 @@ def auth_header():
     return oauth_header('POST', URL, keys) if all(keys.values()) else None
 
 
-def post_once(key, text):
-    """Post `text` (or a list of posts, as a thread) unless `key` was already posted. Returns a one-line status; never
-    raises (posting must not fail a run)."""
+MEDIA_URL = 'https://api.x.com/2/media/upload'
+
+
+def upload_image(png, auth):
+    """Media id for a PNG, or None (no media.write permission, or any failure: the post goes out as text)."""
+    import requests
+    try:
+        r = requests.post(MEDIA_URL, headers={'Authorization': auth}, timeout=60,
+                          files={'media': ('card.png', png, 'image/png')}, data={'media_category': 'tweet_image'})
+        if r.status_code not in (200, 201):
+            print(f"X: image upload failed ({r.status_code}): {' '.join(r.text.split())[:200]}", flush=True)
+            return None
+        return r.json()['data']['id']
+    except Exception as e:
+        print(f'X: image upload failed ({type(e).__name__}: {e})', flush=True)
+        return None
+
+
+def post_once(key, text, image=None):
+    """Post `text` (or a list of posts, as a thread) unless `key` was already posted; `image` (PNG bytes) goes on the
+    first post when it uploads. Returns a one-line status; never raises (posting must not fail a run)."""
     try:
         if not (all(os.environ.get(k) for k in OAUTH2) or all(os.environ.get(k) for k in KEYS)):
             return 'X: keys not set, nothing posted'
@@ -281,8 +328,10 @@ def post_once(key, text):
             return f'X: already posted {key}'
         import requests
         auth, first, prev = auth_header(), None, None
+        media = upload_image(image, auth) if image and auth.startswith('Bearer') else None
         for t in ([text] if isinstance(text, str) else text):
-            body = {'text': t, **({'reply': {'in_reply_to_tweet_id': prev}} if prev else {})}
+            body = {'text': t, **({'reply': {'in_reply_to_tweet_id': prev}} if prev else {}),
+                    **({'media': {'media_ids': [media]}} if media and not prev else {})}
             r = requests.post(URL, json=body, timeout=30, headers={'Authorization': auth})
             if r.status_code != 201:
                 scope = f' [token scopes: {SCOPES}]' if SCOPES is not None else ''
@@ -295,7 +344,7 @@ def post_once(key, text):
         done[key] = first
         POSTED.parent.mkdir(exist_ok=True)
         POSTED.write_text(json.dumps(done, indent=1))
-        return f'X: posted {key} ({done[key]})'
+        return f"X: posted {key} ({done[key]}){' with image' if media else ''}"
     except Exception as e:
         return f'X: post failed ({type(e).__name__}: {e})'
 
@@ -310,7 +359,7 @@ def post_picks(site):
         return 'X: no games or no picks today, nothing posted'
     if site['date'] in posted_keys():                   # posted before the per-model format: don't repost the day
         return f"X: already posted {site['date']}"
-    return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m)) for m, _ in MODELS)
+    return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m), picks_image(site, m)) for m, _ in MODELS)
 
 
 def post_results(site, today=None):
@@ -318,7 +367,8 @@ def post_results(site, today=None):
     if 'results:' + site['date'] in posted_keys():        # posted before the per-model format
         out = [f"X: already posted results:{site['date']}"]
     else:
-        out = [post_once(f"results:{site['date']}:{m}", results_text(site, m)) for m, _ in MODELS if night(site, m)] \
+        out = [post_once(f"results:{site['date']}:{m}", results_text(site, m), results_image(site, m))
+               for m, _ in MODELS if night(site, m)] \
               or ['X: no settled bets for that night, nothing posted']
     today = today or datetime.now(ZoneInfo('America/New_York')).date()
     if today.weekday() == 0:
@@ -341,7 +391,8 @@ if __name__ == '__main__':
         if text.lower() == 'picks':                       # the day's picks changed after the noon post
             for m, _ in MODELS:                            # one update per model, each distinct version posted once
                 posts = picks_posts(site, m, ' · Updated')
-                print(post_once(f"{site['date']}:{m}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts))
+                print(post_once(f"{site['date']}:{m}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts,
+                                picks_image(site, m)))
             sys.exit()
         print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
     elif '--dry-run' in sys.argv:

@@ -10,3 +10,4 @@ requests==2.32.3
 Unidecode==1.2.0
 nba_api==1.10.2
 nbainjuries==1.1.1
+matplotlib==3.10.7
