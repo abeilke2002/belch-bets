@@ -54,7 +54,16 @@
 .track { height: 10px; border-radius: 999px; background: #1b2028; overflow: hidden; }
 .fill { height: 100%; border-radius: inherit; background: var(--mc); transform-origin: left center; animation: grow .8s cubic-bezier(.2, .7, .2, 1) both; }
 .fill.neg { background: var(--loss); }
-.bar .val { text-align: right; font-weight: 700; }
+.bar .val { text-align: right; font-weight: 700; line-height: 1.15; }
+.bar .val small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+.tw { position: relative; }
+/* 95% range whisker: a thin line with end caps over the bar; no left cap when the range reaches below zero */
+.ci { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--ink); opacity: .85; pointer-events: none;
+      box-shadow: 0 0 0 1px rgba(11, 13, 16, .75); }                      /* dark halo: readable on light fills and the dark track */
+.ci::before, .ci::after { content: ''; position: absolute; top: -5px; width: 2px; height: 12px; background: inherit;
+                          box-shadow: 0 0 0 1px rgba(11, 13, 16, .75); }
+.ci::before { left: 0; } .ci::after { right: 0; }
+.ci.open::before { display: none; }
 .bar .val.neg { color: var(--loss); }
 .bar .val.none { color: var(--muted); font-weight: 400; }
 @media (min-width: 760px) {
@@ -93,7 +102,8 @@
       <div class="shead"><h2>Three models, one rule</h2><p>Every prop with a 2%+ edge at the best noon price, 1 unit each.</p></div>
       <div class="rcards" id="results"></div>
       <p class="rnote">Past seasons are backtests: each model trained only on earlier seasons, with the same skips as the live site.
-        The three model cards share one bar scale; the combined card has its own.</p>
+        The line across each backtest bar is its 95% range (± under the units): how far luck alone can move a season with that many bets.
+        A range that starts at the bar's left edge reaches below zero. The three model cards share one bar scale; the combined card has its own.</p>
     </section>
   </div>
 
@@ -122,6 +132,18 @@ function sum(bets) {
   const L = bets.filter(b => b.result === 'win' || b.result === 'loss'), wins = L.filter(b => b.result === 'win').length;
   const units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + (b.stake ?? 1), 0);
   return { n: L.length, wins, losses: L.length - wins, units, roi: risked ? units / risked : 0 };
+}
+
+// 95% range for a season's units. Bets on the same night move together, so each day's total counts as one draw:
+// total ± 1.96 × sd(day totals) × √days. Matches a by-day bootstrap within about 2u on the backtests.
+function unitsCI(bets) {
+  const by = {};
+  for (const b of bets) if (b.result === 'win' || b.result === 'loss') by[b.date] = (by[b.date] || 0) + b.units;
+  const d = Object.values(by), n = d.length;
+  if (n < 10) return null;
+  const tot = d.reduce((a, x) => a + x, 0), m = tot / n;
+  const pm = 1.96 * Math.sqrt(d.reduce((a, x) => a + (x - m) ** 2, 0) / (n - 1) * n);
+  return { lo: tot - pm, hi: tot + pm, pm };
 }
 
 function renderToday(site) {
@@ -154,10 +176,11 @@ async function renderResults(site) {
   const seasons = [...new Set([liveSeason, ...past.flat().map(s => s.season)])].sort().reverse();
   const betsFor = (i, season) => season === liveSeason ? ledger.filter(b => marketOf(b) === MODELS[i].m && seasonOf(b.date) === liveSeason)
                                                        : (past[i].find(s => s.season === season)?.bets || []);
-  const cards = MODELS.map((M, i) => ({ ...M, rows: seasons.map(s => ({ season: s, t: sum(betsFor(i, s)) })) }));
-  cards.push({ m: 'all', name: 'All three', rows: seasons.map(s => ({ season: s, t: sum(MODELS.flatMap((_, i) => betsFor(i, s))) })) });
-  // the three models share one scale (comparable bars); the combined card has its own
-  const big = rows => Math.max(1, ...rows.map(r => Math.abs(r.t.units)));
+  const row = (s, bets) => ({ season: s, t: sum(bets), ci: s === liveSeason ? null : unitsCI(bets) });   // ranges for backtests
+  const cards = MODELS.map((M, i) => ({ ...M, rows: seasons.map(s => row(s, betsFor(i, s))) }));
+  cards.push({ m: 'all', name: 'All three', rows: seasons.map(s => row(s, MODELS.flatMap((_, i) => betsFor(i, s)))) });
+  // the three models share one scale (comparable bars); the combined card has its own. The scale makes room for the ranges.
+  const big = rows => Math.max(1, ...rows.map(r => Math.max(Math.abs(r.t.units), r.ci ? r.ci.hi : 0)));
   const modelScale = Math.max(...cards.filter(c => c.m !== 'all').map(c => big(c.rows)));
   $('results').innerHTML = cards.map(c => {
     const rows = c.rows, scale = c.m === 'all' ? big(rows) : modelScale;
@@ -167,10 +190,14 @@ async function renderResults(site) {
                    [`${sgn(tot.units)}u`, 'Units', cls(tot.units)], [tot.n ? `${(tot.wins / tot.n * 100).toFixed(1)}%` : '–', 'Win %']];
     const bars = rows.map(r => {
       const live = r.season === liveSeason, w = Math.abs(r.t.units) / scale * 100;
-      const val = r.t.n ? `<span class="val ${r.t.units < 0 ? 'neg' : ''}">${sgn(r.t.units)}u</span>` : '<span class="val none">–</span>';
-      return `<div class="bar" title="${r.season}: ${r.t.wins}–${r.t.losses}, ${sgn(r.t.units)}u">
+      const ci = r.ci && r.t.units > 0 ? r.ci : null;
+      const val = r.t.n ? `<span class="val ${r.t.units < 0 ? 'neg' : ''}">${sgn(r.t.units)}u${ci ? `<small>± ${Math.round(ci.pm)}</small>` : ''}</span>` : '<span class="val none">–</span>';
+      const lo = ci ? Math.max(0, ci.lo) / scale * 100 : 0, hi = ci ? ci.hi / scale * 100 : 0;
+      const whisker = ci ? `<i class="ci${ci.lo < 0 ? ' open' : ''}" style="left:${lo.toFixed(1)}%;width:${(hi - lo).toFixed(1)}%"></i>` : '';
+      const tip = `${r.season}: ${r.t.wins}–${r.t.losses}, ${sgn(r.t.units)}u` + (r.ci ? `; 95% range ${sgn(r.ci.lo, 0)} to ${sgn(r.ci.hi, 0)}u` : '');
+      return `<div class="bar" title="${tip}">
         <span class="lbl">${r.season}<small>${live ? 'live' : 'backtest'}</small></span>
-        <div class="track"><div class="fill ${r.t.units < 0 ? 'neg' : ''}" style="width:${w.toFixed(1)}%"></div></div>${val}</div>`;
+        <div class="tw"><div class="track"><div class="fill ${r.t.units < 0 ? 'neg' : ''}" style="width:${w.toFixed(1)}%"></div></div>${whisker}</div>${val}</div>`;
     }).join('');
     const title = c.page ? `<a href="${c.page}">${c.name}</a>` : c.name;
     return `<article class="rcard" style="--mc:var(--m-${c.m})">

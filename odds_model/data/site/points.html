@@ -975,6 +975,19 @@ function drawChart(L, box = $('chart')) {
 let SEASONS = null, HSEL = null;
 const seasonOf = d => { const [y, m] = d.split('-').map(Number), s = m >= 8 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, '0')}`; };
 const TAGS = { live: 'Live', replay: 'Replay backtest', backtest: 'Backtest' };
+// 95% range for a backtest season's units. Bets on the same night move together, so each day's total counts as one
+// draw: total ± 1.96 × sd(day totals) × √days (matches a by-day bootstrap within about 2u).
+function unitsCI(bets) {
+  const by = {};
+  for (const b of bets) if (b.result === 'win' || b.result === 'loss') by[b.date] = (by[b.date] || 0) + b.units;
+  const d = Object.values(by), n = d.length;
+  if (n < 10) return null;
+  const tot = d.reduce((a, x) => a + x, 0), m = tot / n;
+  const pm = 1.96 * Math.sqrt(d.reduce((a, x) => a + (x - m) ** 2, 0) / (n - 1) * n);
+  return { lo: tot - pm, hi: tot + pm, pm };
+}
+const ciText = ci => `${sgn(ci.lo, 0)} to ${sgn(ci.hi, 0)}u`;
+
 function seasonSum(bets) {
   const L = bets.filter(b => b.result === 'win' || b.result === 'loss'), wins = L.filter(b => b.result === 'win').length;
   const units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + b.stake, 0);
@@ -992,11 +1005,12 @@ async function renderHistory() {
     HSEL = HSEL || SEASONS[0].season;
   }
   $('scards').innerHTML = SEASONS.map(s => {
-    const t = seasonSum(s.bets);
+    const t = seasonSum(s.bets), ci = s.kind === 'live' ? null : unitsCI(s.bets);
     return `<button class="scard" type="button" data-s="${s.season}" aria-pressed="${s.season === HSEL}">
       <span class="tag ${s.kind}">${TAGS[s.kind]}</span><span class="sn">${s.season}</span>
       <span class="u ${t.L.length ? cls(t.units) : 'muted'}">${t.L.length ? sgn(t.units) + 'u' : '–'}</span>
-      <span class="k">${t.L.length ? `${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% return` : 'no settled plays yet'}</span></button>`;
+      <span class="k">${t.L.length ? `${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% return` : 'no settled plays yet'}</span>
+      ${ci ? `<span class="k">95% range ${ciText(ci)}</span>` : ''}</button>`;
   }).join('');
   $('scards').querySelectorAll('.scard').forEach(b => b.onclick = () => { HSEL = b.dataset.s; renderHistory(); });
 
@@ -1007,6 +1021,7 @@ async function renderHistory() {
   $('h-stats').innerHTML = t.L.length ? [
     [`${sgn(t.units)}u`, 'profit', cls(t.units)], [`${t.wins}–${t.losses}`, `record, ${pct(t.wins / t.L.length, 0)}`, ''],
     [`${sgn(t.roi * 100)}%`, 'return on units risked', ''], [`${s.bets.length}`, 'plays', ''],
+    ...(s.kind !== 'live' && unitsCI(s.bets) ? [[ciText(unitsCI(s.bets)), '95% range: what luck alone could give a season this size', '']] : []),
   ].map(([n, k, c]) => `<div class="fig"><span class="n ${c}">${n}</span><span class="k">${k}</span></div>`).join('') : '';
   if (t.L.length) drawChart(t.L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled play.</p>';
   $('h-side').innerHTML = seasonDetails(t.L, avgEdge);

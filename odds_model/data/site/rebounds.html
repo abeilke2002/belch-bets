@@ -195,6 +195,19 @@ function renderToday() {
   if (S.length) drawChart(S, $('chart')); else $('chart').innerHTML = '';
 }
 
+// 95% range for a backtest season's units. Bets on the same night move together, so each day's total counts as one
+// draw: total ± 1.96 × sd(day totals) × √days (matches a by-day bootstrap within about 2u).
+function unitsCI(bets) {
+  const by = {};
+  for (const b of bets) if (b.result === 'win' || b.result === 'loss') by[b.date] = (by[b.date] || 0) + b.units;
+  const d = Object.values(by), n = d.length;
+  if (n < 10) return null;
+  const tot = d.reduce((a, x) => a + x, 0), m = tot / n;
+  const pm = 1.96 * Math.sqrt(d.reduce((a, x) => a + (x - m) ** 2, 0) / (n - 1) * n);
+  return { lo: tot - pm, hi: tot + pm, pm };
+}
+const ciText = ci => `${sgn(ci.lo, 0)} to ${sgn(ci.hi, 0)}u`;
+
 function summary(L) {
   const wins = L.filter(b => b.result === 'win').length, units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + b.stake, 0);
   return { wins, losses: L.length - wins, units, roi: risked ? units / risked : 0 };
@@ -579,17 +592,19 @@ async function renderHistory() {
     HSEL = HSEL || SEASONS[0].kind + SEASONS[0].season;
   }
   $('scards').innerHTML = SEASONS.map(s => {
-    const L = s.bets.filter(b => b.result === 'win' || b.result === 'loss'), t = summary(L);
+    const L = s.bets.filter(b => b.result === 'win' || b.result === 'loss'), t = summary(L), ci = s.kind === 'live' ? null : unitsCI(s.bets);
     return `<button class="scard" type="button" data-s="${s.kind + s.season}" aria-pressed="${s.kind + s.season === HSEL}">
       <span class="tag ${s.kind}">${TAGS[s.kind]}</span><span class="sn">${s.season}</span>
       <span class="u ${L.length ? cls(t.units) : 'muted'}">${L.length ? sgn(t.units) + 'u' : '–'}</span>
-      <span class="k">${L.length ? `${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% return` : 'no settled bets yet'}</span></button>`;
+      <span class="k">${L.length ? `${t.wins}–${t.losses} · ${sgn(t.roi * 100)}% return` : 'no settled bets yet'}</span>
+      ${ci ? `<span class="k">95% range ${ciText(ci)}</span>` : ''}</button>`;
   }).join('');
   $('scards').querySelectorAll('.scard').forEach(b => b.onclick = () => { HSEL = b.dataset.s; renderHistory(); });
   const s = SEASONS.find(x => x.kind + x.season === HSEL), L = s.bets.filter(b => b.result === 'win' || b.result === 'loss'), t = summary(L);
   $('h-title').textContent = `${s.season} · ${TAGS[s.kind]}`;
   $('h-note').textContent = s.note;
-  $('h-stats').innerHTML = L.length ? figs(t, L.length) : '';
+  const hci = s.kind === 'live' ? null : unitsCI(s.bets);
+  $('h-stats').innerHTML = L.length ? figs(t, L.length) + (hci ? `<div class="fig"><span class="n">${ciText(hci)}</span><span class="k">95% range: what luck alone could give a season this size</span></div>` : '') : '';
   if (L.length) drawChart(L, $('h-chart')); else $('h-chart').innerHTML = '<p class="muted">The chart starts after the first settled bet.</p>';
   const months = {};
   [...s.bets].reverse().forEach(b => (months[b.date.slice(0, 7)] ||= []).push(b));
