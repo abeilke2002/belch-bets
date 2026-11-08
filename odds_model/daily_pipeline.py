@@ -59,6 +59,7 @@ LOG_COLS = ['date', 'player', 'PLAYER_ID', 'team', 'opponent', 'event_id', 'comm
             'book', 'p_side', 'edge', 'stake', 'close_line', 'close_novig_side', 'clv', 'points', 'result', 'units', 'market']
 STAT_MARKETS = {'rebounds': 'reb', 'assists': 'ast'}          # besides points; 'points' in the log = the stat's actual value
 CORRECTED = DATA / 'live' / 'corrected_bets.csv'               # site-only: stat-market picks re-made after a model fix, by date
+X_ADDED_DATES = {'2026-11-08'}                                  # days X also reports the corrected picks for ('added' = not posted at noon)
 
 
 class OverrideError(ValueError):
@@ -877,6 +878,13 @@ def record(paths):
         for b in site:
             b['corrected'] = (str(b['date']) + b['player'] + b['market'] + b['side']) in keys
         out['site_ledger'] = site
+        # X: the posted bets, except X_ADDED_DATES, where the corrected picks (posted bets plus any added) are reported
+        dated = log['date'].astype(str).isin(X_ADDED_DATES) & log['market'].isin(STAT_MARKETS)
+        was_posted = set(zip(log['date'].astype(str), log['player'], log['market'], log['side']))
+        x = rows(pd.concat([log[~dated], fix[fix['date'].astype(str).isin(X_ADDED_DATES)]], ignore_index=True))
+        for b in x:
+            b['added'] = (str(b['date']), b['player'], b['market'], b['side']) not in was_posted
+        out['x_ledger'] = x
     return out
 
 

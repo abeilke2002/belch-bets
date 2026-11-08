@@ -125,13 +125,15 @@ def results_card(market, date_label, bets, records):
         res = b['result']
         c = WIN if res == 'win' else LOSS if res == 'loss' else MUTED
         side = 'U' if b['side'] == 'UNDER' else 'O'
-        _px(fig, 120, y, b['player'], size, INK, 'bold')
+        _px(fig, 120, y, b['player'] + ('*' if b.get('added') else ''), size, INK, 'bold')
         _px(fig, 560, y, f"{side} {b['line']:g}", size - 2, INK2)
         final = f"{b['points']:g} {UNIT[market]}" if b.get('points') is not None else 'DNP'
         _px(fig, 760, y, final, size, INK, 'bold')
         _px(fig, 1000, y, {'win': 'WON', 'loss': 'LOST', 'push': 'PUSH', 'void': 'VOID'}.get(res, res.upper()), size - 2, c, 'bold')
     more = f'  ·  +{len(bets) - len(shown)} more' if len(bets) > len(shown) else ''
     _px(fig, 48, H - 40, '   ·   '.join(records) + more, 15, INK2)
+    if any(b.get('added') for b in bets):
+        _px(fig, W - 48, H - 40, '* added after a model fix', 13, MUTED, ha='right')
     return _png(fig)
 
 

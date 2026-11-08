@@ -87,11 +87,13 @@ def pick_block(p):
 
 MODELS = [('points', 'Points'), ('rebounds', 'Rebounds'), ('assists', 'Assists')]
 market_of = lambda b: b.get('market') or 'points'
+ledger_of = lambda site: (site.get('record') or {}).get('x_ledger') or (site.get('record') or {}).get('ledger', [])   # what X reports
+ADDED = '* added after a model fix'
 
 
 def records_tail(site, market, before=True):
     """'Rebounds season 3-1 · +1.8u' and 'All models 12-12 · -0.5u' over settled bets (before the page day, or through it)."""
-    led = [b for b in (site.get('record') or {}).get('ledger', []) if (b['date'] < site['date'] if before else b['date'] <= site['date'])]
+    led = [b for b in ledger_of(site) if (b['date'] < site['date'] if before else b['date'] <= site['date'])]
     name = dict(MODELS)[market]
     mine = [b for b in led if market_of(b) == market]
     out = [f"{name} season {record(mine, pct=False)}" if any(b.get('result') in SETTLED for b in mine) else f"{name} season 0-0"]
@@ -162,8 +164,8 @@ def picks_text(site):
 
 def night(site, market=None):
     """The page day's bets (one model's, or all) from the ledger, or [] if none or any is still unsettled."""
-    bets = [b for b in (site.get('record') or {}).get('ledger', []) if b['date'] == site['date']
-            and (market is None or market_of(b) == market)]
+    bets = [b for b in ledger_of(site) if b['date'] == site['date'] and (market is None or market_of(b) == market)
+            and not (b.get('added') and b.get('result') not in SETTLED)]       # an added bet that can't be graded never holds up a post
     return bets if bets and all(b.get('result') in SETTLED for b in bets) else []
 
 
@@ -189,10 +191,10 @@ def results_text(site, market):
     """One model's bets from the night with the stat and result, the night's total, that model's season and the overall."""
     word = {'win': 'W', 'loss': 'L', 'push': 'push', 'void': 'void, DNP'}
     bets = night(site, market)
-    lines = [f"{b['player']} {side(b)} {b['line']:g} {stat(b)}: " + (f"{b['points']:g}, " if b.get('points') is not None else '')
+    lines = [f"{b['player']}{'*' if b.get('added') else ''} {side(b)} {b['line']:g} {stat(b)}: " + (f"{b['points']:g}, " if b.get('points') is not None else '')
              + word[b['result']] for b in bets]
     return fit(f"The Noon Line · {dict(MODELS)[market]} results · {day_label(site['date'])}", lines,
-               [f"Night: {record(bets, pct=False)}", *records_tail(site, market, before=False), '', TAGS_RESULTS])
+               [f"Night: {record(bets, pct=False)}", *records_tail(site, market, before=False), *([ADDED] if any(b.get('added') for b in bets) else []), '', TAGS_RESULTS])
 
 
 def oauth_header(method, url, keys, params=None):
@@ -366,7 +368,7 @@ def post_results(site, today=None):
               or ['X: no settled bets for that night, nothing posted']
     today = today or datetime.now(ZoneInfo('America/New_York')).date()
     if today.weekday() == 0:
-        monday, ledger = today.isoformat(), (site.get('record') or {}).get('ledger', [])
+        monday, ledger = today.isoformat(), ledger_of(site)
         start = (today - timedelta(days=7)).isoformat()
         if any(start <= b['date'] < monday and b.get('result') in SETTLED for b in ledger):
             out.append(post_once('week:' + monday, week_text(ledger, monday)))
@@ -402,6 +404,6 @@ if __name__ == '__main__':
         print(picks_text(site), '\n=====')
         for m, _ in MODELS:
             print(results_text(site, m) if night(site, m) else f'results ({m}): nothing settled for that night', '\n---')
-        print(week_text(site['record']['ledger'], sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
+        print(week_text(ledger_of(site), sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
     else:
         print(post_picks(site))
