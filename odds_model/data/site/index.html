@@ -33,6 +33,9 @@
 .mcard .go { font-size: 13px; color: var(--mc); }
 .waiting { color: var(--ink-2); font-size: 15px; }
 .waiting a { color: var(--accent); }
+.tgames { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 36px; }
+.tgame { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.tgame span:last-child { color: var(--muted); }
 
 /* Results: one card per model, a bar per season on a shared scale */
 .rcards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
@@ -153,8 +156,17 @@ function renderToday(site) {
   if (!site) return;
   if (site.status === 'error' && site.date === today) $('banner').innerHTML = `<div class="banner">Today's update failed. ${esc(site.message)}</div>`;
   if (site.date !== today) {                                     // picks.json still holds the last posted day
-    $('today-sub').textContent = '';
-    $('today').innerHTML = `<p class="waiting">Today's bets post around noon ET. Last posted: <a href="points.html">${weekday(site.date)}'s picks</a>.</p>`;
+    const G = site.tonight?.date === today ? site.tonight.games : [];  // the morning results run adds tonight's games
+    const b2b = G.flatMap(g => g.b2b || []);
+    const rested = g => [g.away, g.home].filter(t => !(g.b2b || []).includes(t));
+    $('today-sub').textContent = G.length ? `${G.length} game${G.length === 1 ? '' : 's'} tonight.` +
+      (b2b.length ? ` Not shown: ${b2b.join(', ')}, on a back-to-back (their players are skipped).` : '') : '';
+    const list = G.filter(g => rested(g).length).map(g => {
+      const r = rested(g);
+      return `<div class="tgame"><span>${esc(r.length === 2 ? `${g.away} at ${g.home}` : r[0])}</span><span>${esc(g.tip)}</span></div>`;
+    }).join('');
+    $('today').innerHTML = (list ? `<div class="tgames">${list}</div>` : '') +
+      `<p class="waiting">Today's bets post around noon ET. Last posted: <a href="points.html">${weekday(site.date)}'s picks</a>.</p>`;
     return;
   }
   const picks = site.picks || [];
