@@ -394,7 +394,7 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
     removed = {} if replay else load_json(REMOVED).get(str(day), {})
     board, bet_idx = make_board(f, status, day, left, removed)
 
-    site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games))
+    site.update(slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games, day))
     site['slate']['overrides'] = over
     site['slate']['report'] = report            # noon / late / early or missing (the Worker reruns when one appears) / none
     site['props'] = props_payload(board)
@@ -671,20 +671,72 @@ def book_prices(p, replay, market='points'):
     return sorted(out, key=lambda x: -999 if x['edge'] is None else -x['edge'])
 
 
-def slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games):
-    gm = []
+def b2b_teams(games, day, schedule):
+    """Teams on `schedule` that also played the day before (yesterday's box scores, or its cached schedule if a box
+    score is missing): the second night of a back-to-back, whose players the rule skips."""
+    prev = day - dt.timedelta(days=1)
+    played = set(games.loc[games['GAME_DATE'] == pd.Timestamp(prev), 'TEAM_ID'].astype(int))
+    cache = DATA / 'schedules' / f'{prev}.csv'
+    if cache.exists():
+        played |= set(pd.read_csv(cache)['TEAM_ID'].astype(int))
+    return set(schedule['TEAM_ID'].astype(int)) & played
+
+
+def game_rows(schedule, day, games, tip):
+    """One row per game, by tip time. tip(home_id, away_id) -> UTC/ET timestamp or None. 'b2b': the teams on a back-to-back
+    (the pages leave them out). 'ids' is for the caller and is popped before publishing."""
+    b2b, gm = b2b_teams(games, day, schedule), []
     for gid, g in schedule.groupby('GAME_ID'):
         h, a = g.loc[g['is_home'] == 1, 'TEAM_ID'], g.loc[g['is_home'] == 0, 'TEAM_ID']
         if h.empty or a.empty:
             continue
-        home, away = h.iloc[0], a.iloc[0]
-        props = board[board['TEAM_ID'].isin([home, away])]
-        tip = props['commence_time'].dropna()
-        t = pd.Timestamp(tip.iloc[0]).tz_convert(ET) if len(tip) else None
+        home, away = int(h.iloc[0]), int(a.iloc[0])
+        t = tip(home, away)
+        t = pd.Timestamp(t).tz_convert(ET) if t is not None else None
         gm.append({'home': abbr(team_names().get(home, '')), 'away': abbr(team_names().get(away, '')),
                    'tip': t.strftime('%-I:%M %p ET') if t is not None else '', 't': t.isoformat() if t is not None else '',
-                   'props': int(len(props))})
+                   'b2b': [abbr(team_names().get(x, '')) for x in (away, home) if x in b2b], 'ids': (home, away)})
     gm.sort(key=lambda x: x['t'])
+    return gm
+
+
+def espn_tips(day):
+    """{(home, away) team names: tip time (UTC)} from ESPN's scoreboard."""
+    import requests
+    sb = requests.get('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',
+                      params={'dates': day.strftime('%Y%m%d')}, timeout=30).json()
+    out = {}
+    for e in sb.get('events', []):
+        side = {c['homeAway']: c['team'].get('name') or c['team']['displayName'].split(' ')[-1]
+                for c in e['competitions'][0]['competitors']}
+        out[(side.get('home'), side.get('away'))] = pd.Timestamp(e['date'])
+    return out
+
+
+def tonight_payload(games, day):
+    """The morning page's look ahead: tonight's games, before the noon run replaces them with the full slate."""
+    schedule = load_schedule(games, day)
+    if schedule.empty:
+        return {'date': str(day), 'games': []}
+    try:
+        tips = espn_tips(day)
+    except Exception as e:                            # tip times are a nicety; the games still show
+        print(f'tonight: no ESPN tip times ({type(e).__name__})')
+        tips = {}
+    name = team_names()
+    gm = game_rows(schedule, day, games, lambda h, a: tips.get((name.get(h), name.get(a))))
+    for g in gm:
+        g.pop('ids')
+    return {'date': str(day), 'games': gm}
+
+
+def slate_payload(schedule, board, f, status, sources, unmatched, odds_note, games, day):
+    def tip(home, away):
+        t = board.loc[board['TEAM_ID'].isin([home, away]), 'commence_time'].dropna()
+        return t.iloc[0] if len(t) else None
+    gm = game_rows(schedule, day, games, tip)
+    for g in gm:
+        g['props'] = int(board['TEAM_ID'].isin(g.pop('ids')).sum())
     skip = board['skip']
     return {'games': gm, 'n_props': int(len(board)), 'n_eligible': int((skip == '').sum()),
             'skipped': {'injury': int(skip.str.startswith('on injury').sum()), 'b2b': int((skip == 'back-to-back').sum())},
@@ -892,7 +944,8 @@ def write_site(paths, site):
     site['record'] = record(paths)
     hist = paths.site / 'history'
     hist.mkdir(exist_ok=True)
-    (hist / f"{site['date']}.json").write_text(json.dumps(site, default=str))
+    # 'tonight' (the next day's games, added by the morning results run) belongs to the front page only
+    (hist / f"{site['date']}.json").write_text(json.dumps({k: v for k, v in site.items() if k != 'tonight'}, default=str))
     latest = max(p.stem for p in hist.glob('20*.json'))
     if site['date'] >= latest:                     # a replay of an older day never replaces the front page
         (paths.site / 'picks.json').write_text(json.dumps(site, indent=1, default=str))
@@ -1005,6 +1058,11 @@ def main():
             path = paths.site / 'picks.json'
             site = clear_error(json.loads(path.read_text())) if path.exists() else {'date': str(stamp.date())}
             k = add_finals(paths, games, site)
+            if not args.replay and site.get('date') != str(stamp.date()):
+                try:                                     # tonight's games until the noon run; never fails the results
+                    site['tonight'] = tonight_payload(games, stamp.date())
+                except Exception as e:
+                    print(f'tonight: skipped ({type(e).__name__}: {e})')
             write_site(paths, site)
             print(f'settled {n} bet(s); final points on {k} day(s) of edge boards')
         if not args.replay and not args.no_deploy:

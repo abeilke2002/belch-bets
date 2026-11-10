@@ -384,7 +384,7 @@ footer a { color: var(--ink-2); }
     </section>
 
     <section id="slate-sec">
-      <div class="shead"><h2>Tonight's slate</h2><p id="slate-sub"></p></div>
+      <div class="shead"><h2 id="slate-h">Tonight's slate</h2><p id="slate-sub"></p></div>
       <div class="games" id="games"></div>
     </section>
   </div>
@@ -1076,12 +1076,30 @@ function histRow(b, link) {
     <td class="r">${r}<div class="small ${settledResult(b.result) ? cls(b.units) : ''}">${settledResult(b.result) ? sgn(b.units, 2) + 'u' : ''}</div></td></tr>`;
 }
 
+// Teams on the second night of a back-to-back are left out: the rule skips their players. A game with one rested team
+// shows that team alone; a game with neither is left out.
+const rested = g => [g.away, g.home].filter(t => !(g.b2b || []).includes(t));
+function slateHTML(G) {
+  return G.filter(g => rested(g).length).map(g => {
+    const r = rested(g);
+    return `<div class="game"><span>${esc(r.length === 2 ? `${g.away} at ${g.home}` : r[0])}</span><span>${esc(g.tip)}</span></div>`;
+  }).join('');
+}
+const b2bNote = G => {
+  const t = G.flatMap(g => g.b2b || []);
+  return t.length ? ` Not shown: ${t.join(', ')}, on a back-to-back.` : '';
+};
+
 function renderSlate() {
-  const G = DATA.games || [];
+  // Mornings: the front page still holds last night's picks; the results run adds tonight's games
+  const T = DATA.date === LATEST && DATA.tonight && DATA.tonight.date !== DATA.date ? DATA.tonight : null;
+  const G = T ? T.games : (DATA.games || []);
   $('slate-sec').hidden = !G.length;
-  $('slate-sub').textContent = G.length && DATA.skipped
-    ? `${G.length} games, ${DATA.n_props} props. ${DATA.n_eligible} eligible after skipping ${DATA.skipped.injury} on the injury report and ${DATA.skipped.b2b} on back-to-backs.` : '';
-  $('games').innerHTML = G.map(g => `<div class="game"><span>${g.away} at ${g.home}</span><span>${g.tip}</span></div>`).join('');
+  $('slate-h').textContent = T ? `Tonight's slate, ${longDate(T.date).split(',')[0]}` : "Tonight's slate";
+  $('slate-sub').textContent = !G.length ? ''
+    : T ? `${G.length} game${G.length === 1 ? '' : 's'}. Lines and bets post around noon ET.${b2bNote(G)}`
+    : DATA.skipped ? `${G.length} games, ${DATA.n_props} props. ${DATA.n_eligible} eligible after skipping ${DATA.skipped.injury} on the injury report and ${DATA.skipped.b2b} on back-to-backs.${b2bNote(G)}` : '';
+  $('games').innerHTML = slateHTML(G);
 }
 
 /* ---------- view + navigation ---------- */
