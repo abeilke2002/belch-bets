@@ -35055,8 +35055,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null
+    "close": 3.5,
+    "clv": 0.0
    }
   ],
   "site_ledger": [
@@ -35696,8 +35696,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 3.5,
+    "clv": 0.0,
     "corrected": false
    }
   ],
@@ -36358,8 +36358,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 3.5,
+    "clv": 0.0,
     "added": false
    }
   ]
