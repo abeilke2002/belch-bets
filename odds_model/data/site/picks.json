@@ -35036,8 +35036,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null
+    "close": 3.5,
+    "clv": 0.0
    },
    {
     "date": "2026-11-09",
@@ -35676,8 +35676,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 3.5,
+    "clv": 0.0,
     "corrected": false
    },
    {
@@ -36338,8 +36338,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 3.5,
+    "clv": 0.0,
     "added": false
    },
    {
