@@ -12048,3 +12048,10 @@ logged_at,path,date_param,status,cost,remaining
 2026-11-10T12:01:28,/sports/basketball_nba/events/78ab42ddb22b68903fd53a384d0fc616/odds,,200,3,23656
 2026-11-10T12:01:29,/sports/basketball_nba/events/f5477c781c94e09e85374bbf9149c0f1/odds,,200,3,23653
 2026-11-10T15:31:08,/sports/basketball_nba/events,,200,0,23653
+2026-11-10T15:34:42,/sports/basketball_nba/events,,200,0,23653
+2026-11-10T15:34:42,/sports/basketball_nba/events/3689d555c9a1c81e3d300375b4c80530/odds,,200,3,23650
+2026-11-10T15:34:43,/sports/basketball_nba/events/cfa503c66cd505776a910921875ef7dd/odds,,200,3,23647
+2026-11-10T15:34:43,/sports/basketball_nba/events/8178ff2ec61f604b61dfe6d7b8d71103/odds,,200,3,23644
+2026-11-10T15:34:43,/sports/basketball_nba/events/9ac02cb22adf276b325b1e9c9c6c588e/odds,,200,3,23641
+2026-11-10T15:34:43,/sports/basketball_nba/events/78ab42ddb22b68903fd53a384d0fc616/odds,,200,3,23638
+2026-11-10T15:34:43,/sports/basketball_nba/events/f5477c781c94e09e85374bbf9149c0f1/odds,,200,3,23635
