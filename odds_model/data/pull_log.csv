@@ -11888,7 +11888,6 @@ logged_at,path,date_param,status,cost,remaining
 2026-11-07T17:01:29,/sports/basketball_nba/events/e76682ca6c25a37b0a53cec226b91aab/odds,,200,3,23731
 2026-11-07T20:31:19,/sports/basketball_nba/events/39099dc03208d0771daaab5f7993478a/odds,,200,3,23728
 2026-11-07T21:01:21,/sports/basketball_nba/events/af8d920f175d73f12933c64ae296573f/odds,,200,3,23725
-=======
 2026-11-07T13:11:52,/historical/sports/basketball_nba/events/036a93ca33d6261c21d4bfa6e0d02568/odds,2026-10-30T16:01:04Z,200,20,26334
 2026-11-07T13:11:53,/historical/sports/basketball_nba/events/05200821a78e4f6db8131cff1652550f/odds,2026-11-04T17:01:19Z,200,20,26314
 2026-11-07T13:11:54,/historical/sports/basketball_nba/events/067d97a124c10ea2d206546384500c5e/odds,2026-10-31T16:01:24Z,200,20,26294
@@ -12055,3 +12054,6 @@ logged_at,path,date_param,status,cost,remaining
 2026-11-10T15:34:43,/sports/basketball_nba/events/9ac02cb22adf276b325b1e9c9c6c588e/odds,,200,3,23641
 2026-11-10T15:34:43,/sports/basketball_nba/events/78ab42ddb22b68903fd53a384d0fc616/odds,,200,3,23638
 2026-11-10T15:34:43,/sports/basketball_nba/events/f5477c781c94e09e85374bbf9149c0f1/odds,,200,3,23635
+2026-11-10T16:43:00,/sports,,200,0,23635
+2026-11-10T16:43:02,/historical/sports/basketball_ncaab/odds,2025-02-15T15:00:00Z,200,10,23625
+2026-11-10T16:43:30,/historical/sports/basketball_ncaab/odds,2020-12-05T16:00:00Z,200,10,23615
