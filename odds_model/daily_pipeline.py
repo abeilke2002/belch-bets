@@ -248,8 +248,9 @@ def injury_weights(games, day, schedule, now, allow_fetch, over=None, late=False
 
 # ---------------------------------------------------------------- odds
 
-def pull_noon_odds():
-    """Noon snapshot of every game tipping today (1 credit each), parsed to data/live/odds_lines.parquet."""
+def pull_noon_odds(refresh=False):
+    """Noon snapshot of every game tipping today (1 credit each), parsed to data/live/odds_lines.parquet. A rerun reuses
+    the noon snapshot; refresh=True (late injury news moved lines) moves it to odds_live/noon/ and takes a new one."""
     from daily_logger import snapshot
     from odds_api import OddsAPI
     api = OddsAPI()
@@ -257,9 +258,15 @@ def pull_noon_odds():
     start = lambda e: dt.datetime.fromisoformat(e['commence_time'].replace('Z', '+00:00'))
     events = [e for e in api.get(f'/sports/{SPORT}/events', expected_cost=0) or []
               if start(e).astimezone(ET).date() == now.astimezone(ET).date() and start(e) > now]
+    if refresh:                                     # the parser only reads odds_live/*.json, so noon/ is kept, not read
+        (LIVE / 'noon').mkdir(exist_ok=True)
+        for e in events:
+            old = LIVE / f"{e['id']}_early.json"
+            if old.exists():
+                old.replace(LIVE / 'noon' / old.name)
     saved = snapshot(api, events, 'early')
     parse_live()
-    return f'{len(events)} games, {saved} new snapshots, credits left {api.remaining}'
+    return f'{len(events)} games, {saved} new snapshots{" (lines refreshed " + now.astimezone(ET).strftime("%-I:%M %p") + ")" if refresh else ""}, credits left {api.remaining}'
 
 
 def parse_live():
@@ -369,7 +376,7 @@ def make_board(f, status, day, left=None, removed=None):
     return b, list(b.index[bet.reindex(b.index)])
 
 
-def run_picks(day, paths, replay, now, extra=None, late=False):
+def run_picks(day, paths, replay, now, extra=None, late=False, refresh=False):
     games = pd.read_parquet(DATA / 'player_games.parquet')
     schedule = load_schedule(games, day, from_history=replay)
     site = {'date': str(day), 'updated': now.strftime('%Y-%m-%d %I:%M %p ET'), 'status': 'ok', 'message': '',
@@ -377,7 +384,7 @@ def run_picks(day, paths, replay, now, extra=None, late=False):
     if schedule.empty:
         site['message'] = 'No games today.'
         return site
-    odds_note = 'replay: historical noon lines' if replay else pull_noon_odds()
+    odds_note = 'replay: historical noon lines' if replay else pull_noon_odds(refresh)
     over = {} if replay else {**load_overrides(day), **(extra or {})}
     weights, status, sources, unmatched, report = injury_weights(games, day, schedule, now, allow_fetch=not replay,
                                                                  over=over, late=late)
@@ -1009,6 +1016,8 @@ def main():
     ap.add_argument('--set', default=os.environ.get('OVERRIDE', ''),
                     help='picks: "Player=Status, ..." (Available/Probable/Questionable/Doubtful/Out), saved for the day')
     ap.add_argument('--if-missing', action='store_true', help="picks: do nothing if today's picks already ran")
+    ap.add_argument('--refresh-lines', action='store_true',
+                    help="picks rerun: take new lines for games not yet started (the noon ones move to odds_live/noon/)")
     ap.add_argument('--late-report', action='store_true',
                     help="picks: today's ran without an injury report; redo it with the newest one (the Worker starts this)")
     args = ap.parse_args()
@@ -1031,7 +1040,7 @@ def main():
             games = pd.read_parquet(DATA / 'player_games.parquet') if args.replay else None
             for day in days:
                 now = dt.datetime(day.year, day.month, day.day, 12, 10, tzinfo=ET) if args.replay else stamp
-                site = run_picks(day, paths, args.replay, now, extra, args.late_report)
+                site = run_picks(day, paths, args.replay, now, extra, args.late_report, args.refresh_lines)
                 if extra and not args.replay:
                     save_overrides(day, site['slate']['overrides'])
                 if args.replay:
