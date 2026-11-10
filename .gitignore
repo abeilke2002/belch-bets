@@ -29,3 +29,4 @@ odds_model/data/*
 # injury reports: this season on (older ones only matter to the backtests on the Mac)
 odds_model/data/injury_reports/202[345]-*
 odds_model/data/injury_reports/2026-0*
+!odds_model/data/ncaab_raw/
