@@ -22,6 +22,9 @@
 .betrow .pn { font: 700 20px/1.15 var(--display); letter-spacing: -.01em; }
 .betrow .bl { font: 600 17px/1.2 var(--display); color: var(--accent); }
 .betrow .why { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.nowtag { font-size: 12.5px; margin-top: 3px; }
+.nowtag.ok { color: var(--win); }
+.nowtag.gone { color: var(--muted); text-decoration: none; }
 .betrow .why .price { color: var(--ink-2); font-weight: 600; }
 .betrow .mid { display: grid; gap: 4px; }
 .betrow .res { text-align: right; }
@@ -138,6 +141,10 @@ const monthName = (m, o = { month: 'long', year: 'numeric' }) => new Date(m + '-
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cap = s => s === 'UNDER' ? 'Under' : 'Over';
 const settledResult = r => ['win', 'loss', 'void', 'push'].includes(r);
+// After a line refresh: is this bet still a bet at the new odds? (the bet itself stays the record)
+const nowTag = p => !p.now ? '' : p.now.valid
+  ? `<div class="nowtag ok">Still a bet at ${esc(p.now.at)} odds: ${cap(p.now.side)} ${p.now.line} ${odds(p.now.price)} ${esc(p.now.book)}, edge ${sgn(p.now.edge * 100)}%</div>`
+  : `<div class="nowtag gone">Not a bet at ${esc(p.now.at)} odds</div>`;
 const cls = v => Math.abs(v) < 0.05 ? '' : v > 0 ? 'pos' : 'neg';
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
@@ -184,7 +191,7 @@ function renderToday() {
       <div><div class="pn">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp)}</div></div>
       <div class="mid"><div class="bl">${cap(p.side)} ${p.line} ${UNIT}</div>
         <div class="why"><span class="price">${odds(p.price)}</span> ${book(p.book, p.link)}</div>
-        <div class="why">model ${Number(p.proj).toFixed(1)} · ${pct(p.p, 0)} to hit · edge ${sgn(p.edge * 100)}%</div></div>
+        <div class="why">model ${Number(p.proj).toFixed(1)} · ${pct(p.p, 0)} to hit · edge ${sgn(p.edge * 100)}%</div>${nowTag(p)}</div>
       <div class="res">${res}</div></div>`;
   }).join('') : `<div class="nobets">${m ? `No ${MARKET} prop cleared the 2% edge today.` : (DATA.games || []).length ? `No ${MARKET} lines for this day.` : 'No games this day.'}</div>`;
 

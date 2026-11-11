@@ -92,6 +92,9 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 .betrow .name { font: 700 18px/1.2 var(--display); }
 .betrow .what { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .betrow .side { font: 700 17px/1.2 var(--display); color: var(--accent); }
+.nowtag { flex-basis: 100%; font-size: 12.5px; }
+.nowtag.ok { color: var(--win); }
+.nowtag.gone { color: var(--muted); }
 .betrow .nums { display: flex; gap: 18px; font-size: 15px; font-weight: 600; }
 .betrow .nums small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 .betrow .res { text-align: right; font-size: 14px; }
@@ -454,6 +457,10 @@ function betButton(name, url, side, line) {
   return `<div class="cta"><a class="betbtn" href="${esc(u)}"${ext}>${LOGO[name] ? `<img src="img/${LOGO[name]}.png" alt="">` : ''}${label}<span aria-hidden="true">↗</span></a>${note ? `<span class="small">${note}</span>` : ''}</div>`;
 }
 const settledResult = r => ['win', 'loss', 'void', 'push'].includes(r);
+// After a line refresh: is this bet still a bet at the new odds? (the bet itself stays the record)
+const nowTag = p => !p.now ? '' : p.now.valid
+  ? `<div class="nowtag ok">Still a bet at ${esc(p.now.at)} odds: ${cap(p.now.side)} ${p.now.line} ${odds(p.now.price)} ${esc(p.now.book)}, edge ${sgn(p.now.edge * 100)}%</div>`
+  : `<div class="nowtag gone">Not a bet at ${esc(p.now.at)} odds</div>`;
 const cls = v => Math.abs(v) < 0.05 ? '' : v > 0 ? 'pos' : 'neg';
 let DATA = null, DATES = [], LATEST = null;
 const MARKET = 'points';
@@ -530,7 +537,7 @@ function renderPickList(P) {
       const g = gameOf(p);
       return `<div class="betrow">
         <div><div class="name">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp)}${g ? ' · ' + esc(g.tip) : ''}</div></div>
-        <div class="what"><span class="side">${cap(p.side)} ${p.line}</span><span class="muted">${odds(p.price)}</span>${book(p.book, p.link)}</div>
+        <div class="what"><span class="side">${cap(p.side)} ${p.line}</span><span class="muted">${odds(p.price)}</span>${book(p.book, p.link)}${nowTag(p)}</div>
         <div class="nums"><span>${sgn(p.edge * 100)}%<small>edge</small></span><span>${pct(p.p, 0)}<small>chance</small></span></div>
         <div class="res outcome">${outcomeOf(p)}</div></div>`;
     }).join('')}</div>
