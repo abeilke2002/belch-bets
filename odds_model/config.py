@@ -21,7 +21,7 @@ MARKET = 'player_points'
 LIVE_MARKETS = ['player_points', 'player_rebounds', 'player_assists']
 # Books used for training, the consensus and bets (Caesars = williamhill_us). Raw pulls keep every book.
 BOOKS = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us']
-CREDIT_FLOOR = 2_000             # stop pulling when remaining credits fall below this
+CREDIT_FLOOR = 0                 # no floor: the plan ends soon, so the daily runs may use every remaining credit
 COST_EVENT_ODDS = 10             # historical event odds: 10 x markets x regions
 COST_EVENTS = 1                  # historical events list
 
