@@ -1,8 +1,8 @@
 {
  "date": "2026-11-10",
  "updated": "2026-11-10 03:34 PM ET",
- "status": "error",
- "message": "The picks update failed at 12:01 PM ET: CreditLimit: credit floor 2000 reached (remaining 1526)",
+ "status": "ok",
+ "message": "",
  "picks": [
   {
    "date": "2026-11-10",
