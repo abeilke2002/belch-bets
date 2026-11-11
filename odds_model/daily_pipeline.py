@@ -435,6 +435,19 @@ def run_picks(day, paths, replay, now, extra=None, late=False, refresh=False):
             bet['close_novig_side'] = float(p['close_novig_over'] if over else 1 - p['close_novig_over'])
             bet['clv'] = (bet['close_line'] - bet['line']) * (1 if over else -1)
         bets.append(bet)
+    if refresh and not replay:
+        # A line refresh after the day's bets are out: those bets stay the record (they were posted and placed). Each is
+        # tagged with how it looks at the new odds; the board shows the new lines. Nothing new is logged.
+        prev = load_json(paths.site / 'picks.json')
+        if prev.get('date') == str(day) and prev.get('picks'):
+            key = lambda p: (p['player'], p.get('market', 'points'), p['side'])
+            fresh, at = {key(p): p for p in site['picks']}, now.strftime('%-I:%M %p')
+            for p in prev['picks']:
+                f = fresh.get(key(p))
+                p['now'] = {'at': at, 'valid': f is not None,
+                            **({k: f[k] for k in ('side', 'line', 'price', 'book', 'edge')} if f else {})}
+            site['picks'], site['message'] = prev['picks'], ''
+            return site
     log_bets(paths, str(day), bets)
     if not bets and season_end(day):
         site['message'] = ('No bets: the site sits out April 1 to the end of the regular season, when teams rest '
