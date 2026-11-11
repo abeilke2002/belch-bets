@@ -14331,3 +14331,4 @@ logged_at,path,date_param,status,cost,remaining
 2026-11-10T17:39:44,/historical/sports/basketball_ncaab/odds,2022-04-04T14:00:00Z,200,10,1535
 2026-11-10T17:39:44,/historical/sports/basketball_ncaab/odds,2022-04-05T14:00:00Z,200,0,1535
 2026-11-10T17:39:44,/historical/sports/basketball_ncaab/odds,2022-04-06T14:00:00Z,200,0,1535
+2026-11-10T20:01:32,/sports/basketball_nba/events/cfa503c66cd505776a910921875ef7dd/odds,,200,3,1532
