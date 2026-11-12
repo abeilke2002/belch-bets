@@ -14361,3 +14361,8 @@ logged_at,path,date_param,status,cost,remaining
 2026-11-11T20:01:34,/sports/basketball_nba/events/8e0fdbf07b1f288b00ec5b370f6c1e2d/odds,,200,3,1460
 2026-11-11T20:01:34,/sports/basketball_nba/events/e6a37eea1dddcbd0384c81237e81f47f/odds,,200,3,1457
 2026-11-12T12:01:26,/sports/basketball_nba/events,,401,0,
+2026-11-12T12:12:35,/sports/basketball_nba/events,,200,0,500
+2026-11-12T12:12:35,/sports/basketball_nba/events/d5c5ae8d56762b45d1ec4b85337878f3/odds,,200,3,497
+2026-11-12T12:12:36,/sports/basketball_nba/events/a98ff1ab79feb59277d989c656f16144/odds,,200,3,494
+2026-11-12T12:12:36,/sports/basketball_nba/events/3c93e4724d36d796aed71c0ca4055b1b/odds,,200,3,491
+2026-11-12T12:12:36,/sports/basketball_nba/events/f3f429e773bfb2340ba2bb90f2b9dd1e/odds,,200,3,488
