@@ -44621,8 +44621,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null
+    "close": 12.5,
+    "clv": 0.0
    },
    {
     "date": "2026-11-11",
@@ -44735,8 +44735,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null
+    "close": 10.5,
+    "clv": 0.0
    },
    {
     "date": "2026-11-11",
@@ -45515,8 +45515,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 12.5,
+    "clv": 0.0,
     "corrected": false
    },
    {
@@ -45635,8 +45635,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 10.5,
+    "clv": 0.0,
     "corrected": false
    },
    {
@@ -46437,8 +46437,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 12.5,
+    "clv": 0.0,
     "added": false
    },
    {
@@ -46557,8 +46557,8 @@
     "won": null,
     "points": null,
     "units": null,
-    "close": null,
-    "clv": null,
+    "close": 10.5,
+    "clv": 0.0,
     "added": false
    },
    {
