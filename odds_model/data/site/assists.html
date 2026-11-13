@@ -189,7 +189,7 @@ function renderToday() {
          <div class="small">${L.points != null ? `${L.points} ${UNIT} · ` : ''}<span class="${cls(L.units)}">${sgn(L.units, 2)}u</span></div>`;
     return `<div class="betrow">
       <div><div class="pn">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp)}</div></div>
-      <div class="mid"><div class="bl">${cap(p.side)} ${p.line} ${UNIT}</div>
+      <div class="mid"><div class="bl">${cap(p.side)} ${p.line} ${UNIT}${p.stake && p.stake !== 1 ? ` · ${p.stake}u` : ''}</div>
         <div class="why"><span class="price">${odds(p.price)}</span> ${book(p.book, p.link)}</div>
         <div class="why">model ${Number(p.proj).toFixed(1)} · ${pct(p.p, 0)} to hit · edge ${sgn(p.edge * 100)}%</div>${nowTag(p)}</div>
       <div class="res">${res}</div></div>`;
@@ -243,6 +243,8 @@ function drawChart(L, box) {
 /* ---------- deep dive: why, who's playing, the edge board (same tools as the points page) ---------- */
 const KEY = { rebounds: 'rpg', assists: 'apg' }[MARKET], ABBR = { rebounds: 'reb', assists: 'ast' }[MARKET];
 const MIN_EDGE = 0.02, STAKE = 1;
+// config.STAKE_RULE: rebounds bets with a 4%+ edge are 1.5u
+const stakeFor = e => MARKET === 'rebounds' && e >= 0.04 ? 1.5 : STAKE;
 const implied = a => a > 0 ? 100 / (a + 100) : -a / (-a + 100);
 const payout = a => a > 0 ? a / 100 : 100 / -a;
 const boosted = (a, b) => { const w = payout(a) * (1 + b); return w >= 1 ? Math.round(w * 100) : -Math.round(100 / w); };
@@ -362,7 +364,7 @@ function score(x, minutes, mineToo = true) {
 function scoredProps() {
   const ov = getOv();
   const rows = props().map(x => holdSide({ ...score(x, x.id in ov ? ov[x.id] : null), base: score(x, null, false) }));
-  rows.forEach(r => { r.play = r.ruledOut ? 'out' : r.skip ? 'skip' : r.edge >= MIN_EDGE ? 'bet' : 'pass'; if (r.play === 'bet') r.stake = STAKE; });
+  rows.forEach(r => { r.play = r.ruledOut ? 'out' : r.skip ? 'skip' : r.edge >= MIN_EDGE ? 'bet' : 'pass'; if (r.play === 'bet') r.stake = stakeFor(r.edge); });
   rows.sort((a, b) => b.base.edge - a.base.edge);
   const ids = new Set(rows.map(r => r.id));
   const anyAdj = Object.keys(ov).some(id => ids.has(+id)) || Object.keys(getWho()).length > 0;
