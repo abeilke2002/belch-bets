@@ -139,56 +139,35 @@ def results_card(market, date_label, bets, records):
 
 
 def breakdown_card(market, date_label, pick, e):
-    """PNG: the top bet explained. Left, the bet: sportsbooks' chance -> model's lean -> projection's effect = model's
-    chance vs break-even. Right, what drove the projection (bars add up to it). e = picks.json explain entry."""
+    """PNG: the top bet's projection explained (what drove it, bars add up to it) with one line on the bet.
+    e = the picks.json explain entry."""
     if not e or not e.get('bet'):
         return None
     x, d = e['bet'], e['proj']
     under = x['side'] == 'UNDER'
-    good, bad, grey, model = WIN, LOSS, '#5f6b7a', '#5fa8f0'
     fig = _fig()
     _header(fig, market, 'Top pick, explained', date_label)
     size = f" · {pick['stake']:g}u" if pick.get('stake', 1) != 1 else ''
     _px(fig, 48, 168, f"{pick['player']} · {'Under' if under else 'Over'} {pick['line']:g} {UNIT[market]} · "
                       f"{pick['price']:+d} {BOOK.get(pick['book'], pick['book'])} · edge {pick['edge']:+.1%}{size}", 20, INK, 'bold')
-    # left: the bet, in chance for the side
-    _px(fig, 48, 214, f"CHANCE THE {'UNDER' if under else 'OVER'} HITS", 12, MUTED)
-    rows = [("Sportsbooks' chance", 0, x['market'], grey, f"{x['market']:.1%}"),
-            ("Model's general lean", x['market'], x['market'] + x['lean'], good if x['lean'] >= 0 else bad, f"{x['lean'] * 100:+.1f}"),
-            (f"Projection {x['proj']:.1f} vs {e['line']:g}", x['market'] + x['lean'], x['p'], good if x['proj_eff'] >= 0 else bad, f"{x['proj_eff'] * 100:+.1f}"),
-            ("Model's chance", 0, x['p'], model, f"{x['p']:.1%}"),
-            ('Edge over break-even', x['need'], x['p'], good if x['p'] >= x['need'] else bad, f"{(x['p'] - x['need']) * 100:+.1f}")]
-    vals = [x['market'], x['market'] + x['lean'], x['p'], x['need']]
-    lo, hi = min(vals) - 0.03, max(vals) + 0.03
-    ax = fig.add_axes([250 / W, 1 - 560 / H, 240 / W, 320 / H])
-    ax.set_xlim(lo, hi); ax.set_ylim(len(rows) - 0.4, -0.6); ax.axis('off')
-    for i, (lab, a, b, c, txt) in enumerate(rows):
-        a = max(a, lo)
-        ax.barh(i, abs(b - a), left=min(a, b), height=0.56, color=c)
-        ax.text(lo - (hi - lo) * 0.03, i, lab, ha='right', va='center', fontsize=12.5 * 72 / DPI, color=INK, weight='bold' if i == 3 else 'normal')
-        ax.text(hi + (hi - lo) * 0.03, i, txt, ha='left', va='center', fontsize=13 * 72 / DPI, color=WIN if i == 4 else INK, weight='bold')
-    ax.axvline(x['need'], color=ACCENT, lw=1.6)
-    _px(fig, 48, 590, f"Orange line: {x['need']:.1%} needed at {x['price']:+d}. The model starts from the books' price", 12, MUTED)
-    _px(fig, 48, 610, f"and moves it by how far its projection is from the line.", 12, MUTED)
-    # right: the projection's drivers
-    show = [r for r in d['drivers'] if abs(r['contrib']) >= 0.05][:7]
-    _px(fig, 660, 214, f"WHY {d['pred']:.1f} {UNIT[market].upper()} · FROM {d['base']:.1f}, THE AVERAGE PLAYER", 12, MUTED)
+    _px(fig, 48, 200, f"Projection {d['pred']:.1f} vs a {e['line']:g} line · model gives the {'under' if under else 'over'} "
+                      f"{x['p']:.0%}, the price needs {x['need']:.0%}", 15, INK2)
+    show = [r for r in d['drivers'] if abs(r['contrib']) >= 0.05][:8]
+    _px(fig, 48, 246, f"WHAT DROVE THE {d['pred']:.1f} {UNIT[market].upper()} PROJECTION · STARTING FROM {d['base']:.1f}, THE AVERAGE PLAYER", 12, MUTED)
     m = max(abs(r['contrib']) for r in show) or 1
-    ax2 = fig.add_axes([830 / W, 1 - 560 / H, 230 / W, 320 / H])
-    ax2.set_xlim(-m * 1.9, m * 1.9); ax2.set_ylim(len(show) - 0.4, -0.6); ax2.axis('off')
-    ax2.axvline(0, color=LINE, lw=1)
+    ax = fig.add_axes([330 / W, 1 - 610 / H, 560 / W, 340 / H])
+    ax.set_xlim(-m * 1.25, m * 1.25); ax.set_ylim(len(show) - 0.4, -0.6); ax.axis('off')
+    ax.axvline(0, color=LINE, lw=1)
     for i, r in enumerate(show):
         c = r['contrib']; helps = (c < 0) if under else (c >= 0)
-        ax2.barh(i, c, height=0.56, color=good if helps else bad)
-        ax2.text(c + (m * 0.06 if c >= 0 else -m * 0.06), i, f"{c:+.1f}", ha='left' if c >= 0 else 'right', va='center',
-                 fontsize=12 * 72 / DPI, color=INK, weight='bold')
-        ax2.text(-m * 1.95, i, r['label'], ha='right', va='center', fontsize=12.5 * 72 / DPI, color=INK)
+        ax.barh(i, c, height=0.56, color=WIN if helps else LOSS)
+        ax.text(c + (m * 0.04 if c >= 0 else -m * 0.04), i, f"{c:+.1f}", ha='left' if c >= 0 else 'right', va='center',
+                fontsize=13 * 72 / DPI, color=INK, weight='bold')
+        ax.text(-m * 1.3, i, r['label'], ha='right', va='center', fontsize=14 * 72 / DPI, color=INK)
         if r['value']:
-            ax2.text(m * 1.95, i, r['value'], ha='left', va='center', fontsize=11.5 * 72 / DPI, color=MUTED)
-    _px(fig, 660, 590, f"Green pushes toward the {'under' if under else 'over'}, red against it.", 12, MUTED)
-    _px(fig, 660, 610, 'Bars add up to the projection.', 12, MUTED)
+            ax.text(m * 1.3, i, r['value'], ha='left', va='center', fontsize=13 * 72 / DPI, color=MUTED)
+    _px(fig, 48, 645, f"Green pushes toward the {'under' if under else 'over'}, red against it. Bars add up to the projection.", 12, MUTED)
     return _png(fig)
-
 
 if __name__ == '__main__':
     import json
