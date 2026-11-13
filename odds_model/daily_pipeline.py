@@ -41,7 +41,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from config import BOOKS, DATA, LIVE, LIVE_MARKETS, ROOT, SPORT
+from config import BOOKS, CLOSE_LINES, DATA, LIVE, LIVE_MARKETS, ROOT, SPORT
 from injury_reports import flip_name
 from name_map import norm, roster_match
 from parse_odds import american_to_decimal, american_to_prob
@@ -793,6 +793,8 @@ def log_bets(paths, day, bets):
 
 def run_close(paths, window_min):
     """Closing snapshots for today's bets: one per game, once that game is within `window_min` of tip."""
+    if not CLOSE_LINES:
+        return 'closing lines are off (config.CLOSE_LINES)'
     log = read_log(paths)
     today = str(dt.datetime.now(ET).date())
     todo = log[(log['date'].astype(str) == today) & log['close_line'].isna()]

@@ -17,6 +17,8 @@ const PRIVATE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><met
 display:grid;place-items:center;min-height:100vh;margin:0;padding:0 16px;text-align:center}b{color:#eceef1}</style></head>
 <body><p><b>This site is private.</b><br>Open it with the link you were sent.</p></body></html>`;
 
+const CLOSE_LINES = false;           // evening closing-line pulls (see daily_pipeline.run_close)
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url), key = env.VIEW_KEY;
@@ -47,7 +49,8 @@ export default {
     const ny = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric',
       minute: 'numeric', hour12: false }).formatToParts(at).map(p => [p.type, Number(p.value)]));
     let mode = controller.cron.startsWith('0 ') && ny.minute === 0 ? { 9: 'results', 12: 'picks' }[ny.hour] : null, args = '';
-    if (!mode && controller.cron.startsWith('*/15')) mode = (await closeDue(env, at)) ? 'close' : null;
+    // Closing-line runs are off (free Odds API plan: credits go to the noon pull). Set CLOSE_LINES = true to bring them back.
+    if (CLOSE_LINES && !mode && controller.cron.startsWith('*/15')) mode = (await closeDue(env, at)) ? 'close' : null;
     if (!mode && controller.cron.startsWith('*/10') && ny.hour >= 12 && ny.hour < 16 && await lateReport(env, at, ny))
       [mode, args] = ['picks', '--late-report'];
     if (!mode) return;
