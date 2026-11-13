@@ -16,9 +16,10 @@ import pandas as pd
 import build_history as BH
 import stat_backtest as SB
 import stat_models as SM
-from config import DATA, ROOT
+from config import DATA, ROOT, stake_for
 from parse_odds import american_to_prob
 
+from config import STAKE_RULE as SM_STAKE
 PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
 MARKETS = {'rebounds': ('reb', ['dlogit'], ('UNDER',)), 'assists': ('ast', ['gap', 'gapz'], ('OVER', 'UNDER'))}
 MIN_EDGE, STAKE = 0.02, 1.0
@@ -43,14 +44,15 @@ def season_bets(d, test, train, cols, sides, market, left):
     price = np.where(over, b['early_best_over_price'], b['early_best_under_price']).astype(int)
     win = np.where(over, b['over'] == 1, b['over'] == 0)
     profit = np.where(price > 0, price / 100, 100 / -price)
+    stake = np.array([stake_for(market, e) for e in b['edge']])
     team, home = b['teamName'].map(BH.TEAM_ABBR).fillna(b['teamName']).values, b['home_team'].map(BH.abbr).values
     return pd.DataFrame({
         'date': pd.to_datetime(b['GAME_DATE']).dt.date.astype(str).values, 'player': b['player_name'].values,
         'team': team, 'opponent': np.where(team == home, b['away_team'].map(BH.abbr).values, home), 'market': market,
         'side': np.where(over, 'OVER', 'UNDER'), 'line': b['early_line'].values, 'price': price,
         'book': [BH.BOOK_NAMES.get(x, x) for x in np.where(over, b['early_best_over_book'], b['early_best_under_book'])],
-        'edge': np.round(b['edge'].values, 4), 'stake': STAKE, 'result': np.where(win, 'win', 'loss'),
-        'points': b[SB.STATS[market]].values, 'units': np.round(np.where(win, profit, -1.0) * STAKE, 2)})
+        'edge': np.round(b['edge'].values, 4), 'stake': stake, 'result': np.where(win, 'win', 'loss'),
+        'points': b[SB.STATS[market]].values, 'units': np.round(np.where(win, profit, -1.0) * stake, 2)})
 
 
 def main():
@@ -63,9 +65,10 @@ def main():
         for test, train in PLAN.items():
             bets = season_bets(d, test, train, cols, sides, market, left)
             u = bets['units'].sum()
-            print(f'{market} {test}: {len(bets)} bets, {(bets.result == "win").mean():.1%}, {u:+.1f}u ({u / len(bets):+.1%})')
+            print(f'{market} {test}: {len(bets)} bets, {(bets.result == "win").mean():.1%}, {u:+.1f}u ({u / bets["stake"].sum():+.1%} of risked)')
             seasons.append({'season': test, 'kind': 'backtest', 'bets': json.loads(bets.to_json(orient='records')),
                             'note': f'Backtest, every eligible {market} prop with a 2%+ edge at 1u'
+                                    f'{", 1.5u when the edge is 4%+" if market in SM_STAKE else ""}'
                                     f'{" (unders only)" if sides == ("UNDER",) else ""}: projections trained only on earlier '
                                     f'seasons, over/under model trained on {" and ".join(train)}.'})
         (ROOT / 'site' / f'seasons_{market}.json').write_text(json.dumps({'seasons': seasons}, separators=(',', ':')))

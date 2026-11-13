@@ -21,6 +21,15 @@ MARKET = 'player_points'
 LIVE_MARKETS = ['player_points', 'player_rebounds', 'player_assists']
 # Books used for training, the consensus and bets (Caesars = williamhill_us). Raw pulls keep every book.
 BOOKS = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us']
+STAKE_RULE = {'rebounds': (0.04, 1.5)}   # market: (edge at or above which, stake); every other bet is 1u. site/market.html mirrors it
+
+
+def stake_for(market, edge):
+    """Units for a bet: rebounds edges of 4%+ won about twice the ROI of 2-4% edges in both backtest seasons."""
+    t = STAKE_RULE.get(market)
+    return t[1] if t and edge >= t[0] else 1.0
+
+
 CLOSE_LINES = False              # evening closing-line pulls off (free plan); the Worker has the same switch
 CREDIT_FLOOR = 0                 # no floor: the plan ends soon, so the daily runs may use every remaining credit
 COST_EVENT_ODDS = 10             # historical event odds: 10 x markets x regions

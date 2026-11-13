@@ -21,7 +21,7 @@ The bets follow the backtested rule exactly:
   bet        every remaining prop with an edge >= 2%, at the best price among config.BOOKS
   markets    points (both sides), rebounds (unders only), assists (both sides): stat_models.py, backtested
              2023-26 at +7.2% (rebounds unders) and +5.4% (assists) ROI with the same skips
-  stake      flat 1u each (the stake the multi-seed backtest validated; size the unit for ~3 bets a night)
+  stake      1u each; rebounds 1.5u when the edge is 4%+ (config.STAKE_RULE)
 Outputs: data/site/picks.json (the website reads this), data/bet_log.csv. Replays write under data/replay/.
 Credits: about 1 per game at noon + 1 at close for each game with a bet. Failures put an error banner in
 picks.json and show a Mac notification.
@@ -41,7 +41,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from config import BOOKS, CLOSE_LINES, DATA, LIVE, LIVE_MARKETS, ROOT, SPORT
+from config import BOOKS, CLOSE_LINES, DATA, LIVE, LIVE_MARKETS, ROOT, SPORT, stake_for
 from injury_reports import flip_name
 from name_map import norm, roster_match
 from parse_odds import american_to_decimal, american_to_prob
@@ -369,9 +369,11 @@ def make_board(f, status, day, left=None, removed=None):
                            'teammate traded (game ' + (gone.fillna(0) + 1).astype(int).astype(str) + ' of 3 since)',
                            'on injury report (' + b['status'].fillna('') + ')', 'back-to-back'], '')
     bet = (b['skip'] == '') & (b['edge'] >= MIN_EDGE)
-    b['play'] = np.where(b['skip'] != '', 'skip: ' + b['skip'], np.where(bet, 'BET ' + b['side'] + f' {STAKE:g}u',
-                                                                          'pass: edge < 2%'))
-    b['stake'] = np.where(bet, STAKE, np.nan)
+    market = b['market'] if 'market' in b else pd.Series('points', index=b.index)
+    size = np.array([stake_for(m, e) for m, e in zip(market, b['edge'])])
+    b['play'] = np.where(b['skip'] != '', 'skip: ' + b['skip'],
+                         np.where(bet, 'BET ' + b['side'] + ' ' + np.char.mod('%gu', size), 'pass: edge < 2%'))
+    b['stake'] = np.where(bet, size, np.nan)
     b = b.sort_values('edge', ascending=False)
     return b, list(b.index[bet.reindex(b.index)])
 

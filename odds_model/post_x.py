@@ -82,7 +82,8 @@ def pick_block(p):
     why = f"Model {p['proj']:.1f} {stat(p)} · {p['p']:.0%} to hit"
     if p.get('season') is not None:
         why += f" · avg {p['season']:.1f}"
-    return f"{p['player']} {side(p)} {p['line']:g} {stat(p)} ({p['price']:+d} {BOOK.get(p['book'], p['book'])})\n{why}"
+    size = f" · {p['stake']:g}u" if p.get('stake', 1) != 1 else ''
+    return f"{p['player']} {side(p)} {p['line']:g} {stat(p)} ({p['price']:+d} {BOOK.get(p['book'], p['book'])}){size}\n{why}"
 
 
 MODELS = [('points', 'Points'), ('rebounds', 'Rebounds'), ('assists', 'Assists')]
@@ -124,7 +125,9 @@ def picks_posts(site, market, note=''):
     recs = records_tail(site, market)
     if not bets:
         return ['\n\n'.join([head, f"No {market} bets today: {no_bets_reason(site, market)}.", '\n'.join(recs + [TAGS_PICKS])])]
-    stake = f"{bets[0]['stake']:g}u each" if len(bets) > 1 else f"{bets[0]['stake']:g}u"
+    sizes = sorted({p['stake'] for p in bets})
+    stake = (f"{sizes[0]:g}u each" if len(bets) > 1 else f"{sizes[0]:g}u") if len(sizes) == 1 else \
+        f"{'/'.join(f'{s:g}' for s in sizes)}u (bigger on 4%+ edges)"
     tail = '\n'.join([f"{stake} · {recs[0]}", *recs[1:], TAGS_PICKS])
     blocks, posts = [pick_block(p) for p in bets], []
     cur = [head]

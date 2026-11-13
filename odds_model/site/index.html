@@ -135,7 +135,7 @@ async function getJSON(p) { const r = await fetch(p, { cache: 'no-store' }); if 
 function sum(bets) {
   const L = bets.filter(b => b.result === 'win' || b.result === 'loss'), wins = L.filter(b => b.result === 'win').length;
   const units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + (b.stake ?? 1), 0);
-  return { n: L.length, wins, losses: L.length - wins, units, roi: risked ? units / risked : 0 };
+  return { n: L.length, wins, losses: L.length - wins, units, risked, roi: risked ? units / risked : 0 };
 }
 
 // 95% range for a season's units. Bets on the same night move together, so each day's total counts as one draw:
@@ -198,8 +198,8 @@ async function renderResults(site) {
   const modelScale = Math.max(...cards.filter(c => c.m !== 'all').map(c => big(c.rows)));
   $('results').innerHTML = cards.map(c => {
     const rows = c.rows, scale = c.m === 'all' ? big(rows) : modelScale;
-    const tot = rows.reduce((a, r) => ({ n: a.n + r.t.n, wins: a.wins + r.t.wins, units: a.units + r.t.units }), { n: 0, wins: 0, units: 0 });
-    const roi = tot.n ? tot.units / tot.n : 0;                      // 1u stakes: units per settled bet
+    const tot = rows.reduce((a, r) => ({ n: a.n + r.t.n, wins: a.wins + r.t.wins, units: a.units + r.t.units, risked: a.risked + r.t.risked }), { n: 0, wins: 0, units: 0, risked: 0 });
+    const roi = tot.risked ? tot.units / tot.risked : 0;            // per unit risked (rebounds 4%+ edges are 1.5u)
     const stats = [[tot.n ? `${sgn(roi * 100)}%` : '–', 'ROI'], [`${tot.wins}–${tot.n - tot.wins}`, 'Record'],
                    [`${sgn(tot.units)}u`, 'Units', cls(tot.units)], [tot.n ? `${(tot.wins / tot.n * 100).toFixed(1)}%` : '–', 'Win %']];
     const bars = rows.map(r => {

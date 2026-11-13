@@ -89,7 +89,8 @@ def picks_card(market, date_label, picks, records):
         y = top + 26 + step * (i + 0.5)
         side = 'Under' if p['side'] == 'UNDER' else 'Over'
         _px(fig, 48, y - 6, p['player'], 21, INK, 'bold')
-        _px(fig, 48, y + 22, f"{side} {p['line']:g} {UNIT[market]} · {p['price']:+d} {BOOK.get(p['book'], p['book'])}", 15, INK2)
+        size = f" · {p['stake']:g}u" if p.get('stake', 1) != 1 else ''
+        _px(fig, 48, y + 22, f"{side} {p['line']:g} {UNIT[market]} · {p['price']:+d} {BOOK.get(p['book'], p['book'])}{size}", 15, INK2)
         sd = p.get('sigma') or 0
         lo, hi = _bounds([p['line'], p['proj'] - sd, p['proj'] + sd], pad=0.6)
         _strip(fig, 440, 840, y, lo, hi, [(p['line'], 'line', f"line {p['line']:g}", ACCENT),
