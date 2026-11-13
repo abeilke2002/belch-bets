@@ -13,11 +13,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: picks, close, results, remove (drop a bet, names in override), announce (post the text in args to X), xauth or xcheck (test the X sign-in, posts nothing)
+        description: picks, close, results, remove (drop a bet, names in override), explain (add the model breakdown to the current day), announce (post the text in args to X), xauth or xcheck (test the X sign-in, posts nothing)
         required: true
         default: picks
         type: choice
-        options: [picks, close, results, remove, announce, xauth, xcheck]
+        options: [picks, close, results, remove, explain, announce, xauth, xcheck]
       override:
         description: 'picks: fix a status and rerun, e.g. Luka Doncic=Available. remove: bets to drop, e.g. Daniel Gafford=price moved'
         required: false

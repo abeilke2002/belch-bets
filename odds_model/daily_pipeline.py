@@ -679,6 +679,29 @@ def stat_boards(games, day, schedule, weights, status, replay, left, removed):
     return out, x, proj
 
 
+def explain_existing(paths):
+    """Adds the model breakdown to the page's current day without changing its bets: the boards rebuilt from that day's
+    saved noon lines and the injury report the picks run used (its time), as run_picks builds them."""
+    site = json.loads((paths.site / 'picks.json').read_text())
+    day = dt.date.fromisoformat(site['date'])
+    t = dt.datetime.strptime(site['updated'].replace(' ET', ''), '%Y-%m-%d %I:%M %p')
+    now = t.replace(tzinfo=ET)
+    games = pd.read_parquet(DATA / 'player_games.parquet')
+    schedule = load_schedule(games, day)
+    weights, status, *_ = injury_weights(games, day, schedule, now, allow_fetch=True, over=load_overrides(day))
+    om = joblib.load(DATA / 'models' / 'over_model.pkl')
+    f = predict_day(games, day, schedule, out_weights=weights)
+    left, removed = left_behind(games, day, espn_rosters(day)), load_json(REMOVED).get(str(day), {})
+    board, _ = make_board(f, status, day, left, removed)
+    boards, _, sproj = stat_boards(games, day, schedule, weights, status, False, left, removed)
+    site['explain'] = explain_day(games, day, schedule, weights, {'points': board, **{m: mb for m, (mb, _) in boards.items()}},
+                                  sproj or {}, om)
+    ok = [p for p in site.get('picks') or [] if abs(((site['explain'].get(f"{p.get('market', 'points')}:{p.get('PLAYER_ID')}") or {})
+                                                    .get('bet') or {}).get('p', -1) - p['p_side']) < 0.002]
+    write_site(paths, site)
+    return f"explain: {len(site['explain'])} props; {len(ok)} of {len(site.get('picks') or [])} bets match their posted chance"
+
+
 def explain_day(games, day, schedule, weights, boards, sproj, om):
     """explain.payload for the day: the exact model inputs rebuilt (as predict_day and project do), then every prop's
     drivers and bet breakdown."""
@@ -1049,7 +1072,7 @@ def error_banner(paths, mode, err):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('mode', choices=['picks', 'close', 'results', 'remove'])
+    ap.add_argument('mode', choices=['picks', 'close', 'results', 'remove', 'explain'])
     ap.add_argument('--replay', action='store_true', help='use stored data only (no API calls)')
     ap.add_argument('--date', help='picks: day to run (default today, ET)')
     ap.add_argument('--start')
@@ -1097,6 +1120,8 @@ def main():
                                                                    for p in site['picks']))
         elif args.mode == 'remove':
             print(remove_bets(paths, args.set))
+        elif args.mode == 'explain':
+            print(explain_existing(paths))
         elif args.mode == 'close':
             msg = run_close(paths, args.window)
             print(msg)
