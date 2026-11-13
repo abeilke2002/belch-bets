@@ -7,9 +7,11 @@
 <meta name="theme-color" content="#0b0d10">
 <title>Points · The Noon Line</title>
 <script src="model.js"></script>
+<script src="explain.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="explain.css">
 <style>
 /* One open column. Hierarchy from type size and space, not boxes. Accent only marks the bet. */
 :root {
@@ -523,6 +525,7 @@ function renderPick() {
     </div>
     ${L && settledResult(L.result) && !replay ? '' : betButton(p.book, p.link, p.side, p.line)}
     <div class="outcome">${outcome}</div>
+    ${XP.toggle(DATA.explain?.['points:' + p.PLAYER_ID], p.book)}
   </div>`;
 }
 
@@ -539,7 +542,7 @@ function renderPickList(P) {
         <div><div class="name">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp)}${g ? ' · ' + esc(g.tip) : ''}</div></div>
         <div class="what"><span class="side">${cap(p.side)} ${p.line}</span><span class="muted">${odds(p.price)}</span>${book(p.book, p.link)}${nowTag(p)}</div>
         <div class="nums"><span>${sgn(p.edge * 100)}%<small>edge</small></span><span>${pct(p.p, 0)}<small>chance</small></span></div>
-        <div class="res outcome">${outcomeOf(p)}</div></div>`;
+        <div class="res outcome">${outcomeOf(p)}</div></div>${XP.toggle(DATA.explain?.['points:' + p.PLAYER_ID], p.book)}`;
     }).join('')}</div>
   </div>`;
 }
@@ -843,6 +846,7 @@ function editorRow(r) {
       </div>
     </div>
     ${BOOST ? boostVerdict(r) : ''}
+    ${XP.toggle(DATA.explain?.[`${MARKET}:${r.id}`], r.base?.book ?? r.book)}
   </div></td></tr>`;
 }
 
