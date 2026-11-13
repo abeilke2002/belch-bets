@@ -88,12 +88,14 @@ def pick_block(p):
 MODELS = [('points', 'Points'), ('rebounds', 'Rebounds'), ('assists', 'Assists')]
 market_of = lambda b: b.get('market') or 'points'
 ledger_of = lambda site: (site.get('record') or {}).get('x_ledger') or (site.get('record') or {}).get('ledger', [])   # what X reports
+site_ledger_of = lambda site: (site.get('record') or {}).get('site_ledger') or (site.get('record') or {}).get('ledger', [])   # the site's season records
 ADDED = '* added after a model fix'
 
 
 def records_tail(site, market, before=True):
-    """'Rebounds season 3-1 · +1.8u' and 'All models 12-12 · -0.5u' over settled bets (before the page day, or through it)."""
-    led = [b for b in ledger_of(site) if (b['date'] < site['date'] if before else b['date'] <= site['date'])]
+    """'Rebounds season 3-1 · +1.8u' and 'All models 12-12 · -0.5u' over settled bets (before the page day, or through it).
+    The same ledger as the site's season numbers (with the corrected Nov 7-8 picks), so the posts and the site agree."""
+    led = [b for b in site_ledger_of(site) if (b['date'] < site['date'] if before else b['date'] <= site['date'])]
     name = dict(MODELS)[market]
     mine = [b for b in led if market_of(b) == market]
     out = [f"{name} season {record(mine, pct=False)}" if any(b.get('result') in SETTLED for b in mine) else f"{name} season 0-0"]
@@ -368,7 +370,7 @@ def post_results(site, today=None):
               or ['X: no settled bets for that night, nothing posted']
     today = today or datetime.now(ZoneInfo('America/New_York')).date()
     if today.weekday() == 0:
-        monday, ledger = today.isoformat(), ledger_of(site)
+        monday, ledger = today.isoformat(), site_ledger_of(site)
         start = (today - timedelta(days=7)).isoformat()
         if any(start <= b['date'] < monday and b.get('result') in SETTLED for b in ledger):
             out.append(post_once('week:' + monday, week_text(ledger, monday)))
@@ -404,6 +406,6 @@ if __name__ == '__main__':
         print(picks_text(site), '\n=====')
         for m, _ in MODELS:
             print(results_text(site, m) if night(site, m) else f'results ({m}): nothing settled for that night', '\n---')
-        print(week_text(ledger_of(site), sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
+        print(week_text(site_ledger_of(site), sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
     else:
         print(post_picks(site))
