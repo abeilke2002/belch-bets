@@ -421,6 +421,11 @@ def run_picks(day, paths, replay, now, extra=None, late=False, refresh=False):
                                    'n_eligible': int((mb['skip'] == '').sum()), 'bets': len(midx),
                                    'props': stat_props_payload(mb)}
         to_bet += [(mb, i) for i in midx]
+    try:                                        # the click-to-see breakdown of each prop's projection and bet
+        site['explain'] = explain_day(games, day, schedule, weights, {'points': board, **{m: mb for m, (mb, _) in boards.items()}},
+                                      sproj or {}, om)
+    except Exception as e:                      # a nicety: never fails the run
+        print(f'explain: skipped ({type(e).__name__}: {e})')
     bets = []
     for src, i in to_bet:
         p = src.loc[i]
@@ -672,6 +677,23 @@ def stat_boards(games, day, schedule, weights, status, replay, left, removed):
         d = d.assign(pred_points=d['proj'], pts_season=d[f'{key}_season'], pts_5=d[f'{key}_5'], market=market)
         out[market] = make_board(d, status, day, left, removed)
     return out, x, proj
+
+
+def explain_day(games, day, schedule, weights, boards, sproj, om):
+    """explain.payload for the day: the exact model inputs rebuilt (as predict_day and project do), then every prop's
+    drivers and bet breakdown."""
+    import explain as EX
+    import stat_models as SM
+    from predict_today import features_as_of, snap
+    pm = joblib.load(DATA / 'models' / 'points_model.pkl')
+    sm = joblib.load(SM.MODEL_PATH) if SM.MODEL_PATH.exists() else {}
+    f = features_as_of(games, day, schedule, [], weights)
+    f = f.reset_index() if 'PLAYER_ID' not in f.columns else f
+    mrows = snap(f, pm['minutes_features'])
+    prow = mrows.copy()
+    prow['pred_minutes'] = pm['minutes_model'].predict(mrows[pm['minutes_features']])
+    prow = snap(prow, pm['features'])
+    return EX.payload(boards, prow, pm, mrows, sproj, sm, om)
 
 
 def book_prices(p, replay, market='points'):
@@ -969,7 +991,11 @@ def write_site(paths, site):
     hist = paths.site / 'history'
     hist.mkdir(exist_ok=True)
     # 'tonight' (the next day's games, added by the morning results run) belongs to the front page only
-    (hist / f"{site['date']}.json").write_text(json.dumps({k: v for k, v in site.items() if k != 'tonight'}, default=str))
+    keep = {f"{x.get('market', 'points')}:{x.get('PLAYER_ID')}" for x in site.get('picks') or []}
+    saved = {k: v for k, v in site.items() if k != 'tonight'}
+    if site.get('explain'):                     # past days keep only their bets' breakdowns (the full set is ~300 KB)
+        saved['explain'] = {k: v for k, v in site['explain'].items() if k in keep}
+    (hist / f"{site['date']}.json").write_text(json.dumps(saved, default=str))
     latest = max(p.stem for p in hist.glob('20*.json'))
     if site['date'] >= latest:                     # a replay of an older day never replaces the front page
         (paths.site / 'picks.json').write_text(json.dumps(site, indent=1, default=str))
@@ -981,7 +1007,7 @@ def copy_pages(paths):
     """The site's pages, past seasons (build_history*.py), shared styles and sportsbook logos into the published folder.
     rebounds.html and assists.html are both made from site/market.html."""
     src = ROOT / 'site'
-    for page in [*src.glob('*.html'), *src.glob('seasons*.json'), src / 'model.js', src / 'common.css']:
+    for page in [*src.glob('*.html'), *src.glob('seasons*.json'), src / 'model.js', src / 'explain.js', src / 'explain.css', src / 'common.css']:
         if page.name != 'market.html' and page.exists():
             shutil.copy(page, paths.site / page.name)
     tmpl = (src / 'market.html').read_text()

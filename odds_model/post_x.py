@@ -144,6 +144,20 @@ def picks_posts(site, market, note=''):
     return posts
 
 
+def breakdown_image(site, market):
+    """PNG of the model's top bet explained (x_cards.breakdown_card), or None."""
+    try:
+        import x_cards
+        bets = sorted([p for p in site.get('picks') or [] if market_of(p) == market], key=lambda p: -p['edge'])
+        if not bets:
+            return None
+        top = bets[0]
+        e = (site.get('explain') or {}).get(f"{market}:{top.get('PLAYER_ID')}")
+        return x_cards.breakdown_card(market, day_label(site['date']), top, e)
+    except Exception:
+        return None
+
+
 def picks_image(site, market):
     """PNG for one model's picks post, or None (no bets, or the image can't be drawn)."""
     try:
@@ -319,8 +333,9 @@ def upload_image(png, auth):
 
 
 def post_once(key, text, image=None):
-    """Post `text` (or a list of posts, as a thread) unless `key` was already posted; `image` (PNG bytes) goes on the
-    first post when it uploads. Returns a one-line status; never raises (posting must not fail a run)."""
+    """Post `text` (or a list of posts, as a thread) unless `key` was already posted; `image` (PNG bytes, or a list of
+    them, up to 4) goes on the first post when it uploads. Returns a one-line status; never raises (posting must not fail
+    a run)."""
     try:
         if not (all(os.environ.get(k) for k in OAUTH2) or all(os.environ.get(k) for k in KEYS)):
             return 'X: keys not set, nothing posted'
@@ -329,10 +344,11 @@ def post_once(key, text, image=None):
             return f'X: already posted {key}'
         import requests
         auth, first, prev = auth_header(), None, None
-        media = upload_image(image, auth) if image and auth.startswith('Bearer') else None
+        images = [i for i in (image if isinstance(image, list) else [image]) if i][:4]
+        media = [m for m in (upload_image(i, auth) for i in images) if m] if images and auth.startswith('Bearer') else []
         for t in ([text] if isinstance(text, str) else text):
             body = {'text': t, **({'reply': {'in_reply_to_tweet_id': prev}} if prev else {}),
-                    **({'media': {'media_ids': [media]}} if media and not prev else {})}
+                    **({'media': {'media_ids': media}} if media and not prev else {})}
             r = requests.post(URL, json=body, timeout=30, headers={'Authorization': auth})
             if r.status_code != 201:
                 scope = f' [token scopes: {SCOPES}]' if SCOPES is not None else ''
@@ -345,7 +361,7 @@ def post_once(key, text, image=None):
         done[key] = first
         POSTED.parent.mkdir(exist_ok=True)
         POSTED.write_text(json.dumps(done, indent=1))
-        return f"X: posted {key} ({done[key]}){' with image' if media else ''}"
+        return f"X: posted {key} ({done[key]}){f' with {len(media)} image' + ('s' if len(media) > 1 else '') if media else ''}"
     except Exception as e:
         return f'X: post failed ({type(e).__name__}: {e})'
 
@@ -360,7 +376,8 @@ def post_picks(site):
         return 'X: no games or no picks today, nothing posted'
     if site['date'] in posted_keys():                   # posted before the per-model format: don't repost the day
         return f"X: already posted {site['date']}"
-    return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m), picks_image(site, m)) for m, _ in MODELS)
+    return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m), [picks_image(site, m), breakdown_image(site, m)])
+                     for m, _ in MODELS)
 
 
 def post_results(site, today=None):

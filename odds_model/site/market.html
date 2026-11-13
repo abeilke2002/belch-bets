@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="explain.css">
 <link rel="stylesheet" href="common.css">
 <style>
 .mhead { padding-block: 40px 8px; display: grid; gap: 10px; }
@@ -19,6 +20,7 @@
 .bets { display: grid; gap: 0; }
 .betrow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); }
 .betrow:last-child { border-bottom: 1px solid var(--line); }
+#bets > .xwrap { margin: -6px 0 12px; }
 .betrow .pn { font: 700 20px/1.15 var(--display); letter-spacing: -.01em; }
 .betrow .bl { font: 600 17px/1.2 var(--display); color: var(--accent); }
 .betrow .why { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
@@ -126,6 +128,7 @@
 </div>
 
 <script src="model.js"></script>
+<script src="explain.js"></script>
 <script>
 const MARKET = '__MARKET__';
 const UNIT = { rebounds: 'rebounds', assists: 'assists' }[MARKET];
@@ -192,7 +195,7 @@ function renderToday() {
       <div class="mid"><div class="bl">${cap(p.side)} ${p.line} ${UNIT}${p.stake && p.stake !== 1 ? ` · ${p.stake}u` : ''}</div>
         <div class="why"><span class="price">${odds(p.price)}</span> ${book(p.book, p.link)}</div>
         <div class="why">model ${Number(p.proj).toFixed(1)} · ${pct(p.p, 0)} to hit · edge ${sgn(p.edge * 100)}%</div>${nowTag(p)}</div>
-      <div class="res">${res}</div></div>`;
+      <div class="res">${res}</div></div>${XP.toggle(DATA.explain?.[`${MARKET}:${p.PLAYER_ID}`], p.book)}`;
   }).join('') : `<div class="nobets">${m ? `No ${MARKET} prop cleared the 2% edge today.` : (DATA.games || []).length ? `No ${MARKET} lines for this day.` : 'No games this day.'}</div>`;
 
   const S = LIVE.filter(b => b.date <= DATA.date && (b.result === 'win' || b.result === 'loss'));
@@ -467,6 +470,7 @@ function editorRow(r) {
       </div>
     </div>
     ${BOOST ? boostVerdict(r) : ''}
+    ${XP.toggle(DATA.explain?.[`${MARKET}:${r.id}`], r.base?.book ?? r.book)}
   </div></td></tr>`;
 }
 
