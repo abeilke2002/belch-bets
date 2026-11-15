@@ -444,16 +444,17 @@ def run_picks(day, paths, replay, now, extra=None, late=False, refresh=False):
         bets.append(bet)
     if refresh and not replay:
         # A line refresh after the day's bets are out: those bets stay the record (they were posted and placed). Each is
-        # tagged with how it looks at the new odds; the board shows the new lines. Nothing new is logged.
+        # tagged with how it looks at the new odds; the board shows the new lines. Nothing new is logged, including on a
+        # day the noon run had no bets (the record is noon bets only; Nov 14's refresh once logged three new edges).
         prev = load_json(paths.site / 'picks.json')
-        if prev.get('date') == str(day) and prev.get('picks'):
+        if prev.get('date') == str(day):
             key = lambda p: (p['player'], p.get('market', 'points'), p['side'])
             fresh, at = {key(p): p for p in site['picks']}, now.strftime('%-I:%M %p')
-            for p in prev['picks']:
+            for p in prev.get('picks') or []:
                 f = fresh.get(key(p))
                 p['now'] = {'at': at, 'valid': f is not None,
                             **({k: f[k] for k in ('side', 'line', 'price', 'book', 'edge')} if f else {})}
-            site['picks'], site['message'] = prev['picks'], ''
+            site['picks'], site['message'] = prev.get('picks') or [], prev.get('message') or ''
             return site
     log_bets(paths, str(day), bets)
     if not bets and season_end(day):
