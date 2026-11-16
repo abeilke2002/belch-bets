@@ -199,7 +199,7 @@ async function liveTick() {
       tag.innerHTML = `<b>${v} ${unit}</b> · ${esc(min)} min · ${esc(e.state === 'post' ? 'Final' : e.detail)}`;
       rs.innerHTML = state === 'live'
         ? `<span class="pill live"><i></i>Live</span><span class="small">${over ? `needs ${Math.floor(p.line) + 1 - v} more` : `${Math.floor(p.line) - v} to spare`}</span>`
-        : `<span class="pill ${state}">${state === 'win' ? (e.state === 'post' ? 'Won' : 'Hit') : 'Lost'}</span><span class="small">${e.state === 'post' ? 'final · official in the morning' : 'decided'}</span>`;
+        : `<span class="pill ${state}">${state === 'win' ? (e.state === 'post' ? 'Won' : 'Hit') : 'Lost'}</span><span class="small">${e.state === 'post' ? 'final · official at 9 AM' : 'decided'}</span>`;
     }
     $('night').innerHTML = `<span class="small">Live from ESPN box scores, updated ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. Official results the next morning.</span>`;
     if (picks.every(p => { const e = eventFor(p); return e && e.state === 'post'; })) stopLive();
