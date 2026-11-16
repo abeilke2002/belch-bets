@@ -380,3 +380,11 @@ footer a { color: var(--ink-2); }
 .mswitch a { text-decoration: none; display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--muted); }
 .mswitch a[aria-current="page"] { background: var(--ink); color: var(--bg); }
 .mswitch a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* live (ESPN box scores while games are on) */
+.livetag { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+.livetag b { color: var(--ink); font-weight: 600; }
+.pill.live { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pill.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pill.live i { animation: none; } }

@@ -85,10 +85,10 @@ function betRow(p) {
   const M = MODEL[marketOf(p)], L = result(p), done = L && settled(L.result);
   const stake = p.stake && p.stake !== 1 ? ` <span class="stake">· ${p.stake}u</span>` : '';
   const tip = tipET(p.commence_time);
-  return `<div class="brow">
+  return `<div class="brow" data-key="${esc(liveKey(p))}">
     <div><div class="pn">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp || p.opponent)}${tip ? ' · ' + tip : ''}</div></div>
     <div class="bet"><div class="bl">${cap(p.side)} ${p.line} ${M.unit}${stake}</div>
-      <div class="px"><span class="price">${odds(p.price)}</span>${book(p.book, p.link)}</div>${nowTag(p)}</div>
+      <div class="px"><span class="price">${odds(p.price)}</span>${book(p.book, p.link)}</div>${nowTag(p)}<div class="livetag" hidden></div></div>
     <div class="rs">${pill(done ? L.result : null)}${done ? `<span class="small">${L.points != null ? `${L.points} ${M.unit} · ` : ''}<span class="${cls(L.units)}">${sgn(L.units, 2)}u</span></span>` : ''}</div>
   </div>`;
 }
@@ -146,11 +146,75 @@ function renderSeason() {
   $('season').querySelectorAll('.scell').forEach(a => a.onclick = () => NL.store.set('bb-filter', a.dataset.f));
 }
 
+/* ---------- live: ESPN box scores in the browser while the latest day's bets are being played ----------
+   Display only. The 9 AM results run grades the bets for the record. ESPN allows cross-site requests. */
+const ESPN = 'https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba';   // this host answers browsers (site.api refuses some)
+const ESPN_TEAM = { GSW: 'GS', NOP: 'NO', NYK: 'NY', SAS: 'SA', UTA: 'UTAH', WAS: 'WSH' };
+const STAT_KEY = { points: 'points', rebounds: 'rebounds', assists: 'assists' };
+const liveKey = p => `${marketOf(p)}|${p.player}|${p.side}`;
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[.'’]/g, '')
+  .replace(/\b(jr|sr|ii|iii|iv)\b/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+let LIVE_TIMER = null, LIVE_FINAL = {}, LIVE_ON = false;
+
+const liveWanted = () => DATA && DATA.date === LATEST && (DATA.picks || []).some(p => !settled(result(p)?.result));
+
+async function liveTick() {
+  if (!liveWanted()) return stopLive();
+  if (document.visibilityState === 'hidden') return;              // resumes on the next tick when the tab is back
+  try {
+    const sb = await (await fetch(`${ESPN}/scoreboard?dates=${DATA.date.replaceAll('-', '')}`, { cache: 'no-store' })).json();
+    const events = (sb.events || []).map(e => ({ id: e.id, state: e.status?.type?.state, detail: e.status?.type?.shortDetail || '',
+      teams: e.competitions?.[0]?.competitors?.map(c => c.team?.abbreviation) || [] }));
+    const eventFor = p => { const t = ESPN_TEAM[p.team] || p.team; return events.find(e => e.teams.includes(t)); };
+    const picks = DATA.picks || [], need = [...new Set(picks.map(eventFor).filter(e => e && e.state !== 'pre').map(e => e.id))];
+    const boxes = {};
+    await Promise.all(need.map(async id => {
+      const e = events.find(x => x.id === id);
+      if (LIVE_FINAL[id]) { boxes[id] = LIVE_FINAL[id]; return; }
+      const d = await (await fetch(`${ESPN}/summary?event=${id}`, { cache: 'no-store' })).json();
+      const players = {};
+      for (const team of d.boxscore?.players || []) for (const blk of team.statistics || []) for (const a of blk.athletes || []) {
+        const st = a.stats && a.stats.length ? Object.fromEntries((blk.keys || []).map((k, i) => [k, a.stats[i]])) : null;
+        players[norm(a.athlete?.displayName)] = { st, dnp: !st || a.didNotPlay, reason: a.reason || '' };
+      }
+      boxes[id] = players;
+      if (e.state === 'post') LIVE_FINAL[id] = players;                // a final box score won't change
+    }));
+    for (const p of picks) {
+      const row = document.querySelector(`.brow[data-key="${CSS.escape(liveKey(p))}"]`);
+      if (!row || settled(result(p)?.result)) continue;
+      const e = eventFor(p), tag = row.querySelector('.livetag'), rs = row.querySelector('.rs'), unit = MODEL[marketOf(p)].unit;
+      if (!e || e.state === 'pre') { tag.hidden = true; continue; }
+      const pl = boxes[e.id]?.[norm(p.player)];
+      if (!pl) { tag.hidden = false; tag.textContent = `${e.detail} · no box score line yet`; continue; }
+      if (pl.dnp) {
+        tag.hidden = false; tag.textContent = e.state === 'post' ? `Didn't play${pl.reason ? ` (${pl.reason.toLowerCase()})` : ''}` : `${e.detail} · hasn't played`;
+        if (e.state === 'post') rs.innerHTML = '<span class="pill other">DNP · void</span>';
+        continue;
+      }
+      const v = +pl.st[STAT_KEY[marketOf(p)]] || 0, min = pl.st.minutes || '0', over = p.side === 'OVER';
+      const decided = v > p.line;                                       // an over that's cleared has won; an under that's gone over has lost
+      const state = e.state === 'post' ? (over ? (v > p.line ? 'win' : 'loss') : (v < p.line ? 'win' : 'loss')) : decided ? (over ? 'win' : 'loss') : 'live';
+      tag.hidden = false;
+      tag.innerHTML = `<b>${v} ${unit}</b> · ${esc(min)} min · ${esc(e.state === 'post' ? 'Final' : e.detail)}`;
+      rs.innerHTML = state === 'live'
+        ? `<span class="pill live"><i></i>Live</span><span class="small">${over ? `needs ${Math.floor(p.line) + 1 - v} more` : `${Math.floor(p.line) - v} to spare`}</span>`
+        : `<span class="pill ${state}">${state === 'win' ? (e.state === 'post' ? 'Won' : 'Hit') : 'Lost'}</span><span class="small">${e.state === 'post' ? 'final · official in the morning' : 'decided'}</span>`;
+    }
+    $('night').innerHTML = `<span class="small">Live from ESPN box scores, updated ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. Official results the next morning.</span>`;
+    if (picks.every(p => { const e = eventFor(p); return e && e.state === 'post'; })) stopLive();
+  } catch (e) { /* a missed tick is fine: the next one tries again */ }
+}
+function startLive() { if (LIVE_ON || !liveWanted()) return; LIVE_ON = true; liveTick(); LIVE_TIMER = setInterval(liveTick, 120000); }
+function stopLive() { LIVE_ON = false; clearInterval(LIVE_TIMER); LIVE_TIMER = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && LIVE_ON) liveTick(); });
+
 async function show(date) {
   try {
     DATA = date && date !== LATEST ? await getJSON(`history/${date}.json`) : LATEST_SITE;
     history.replaceState(null, '', !date || DATA.date === LATEST ? location.pathname : '#' + date);
     renderHead(); renderBets(); renderTonight();
+    stopLive(); LIVE_FINAL = {}; startLive();
   } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load that day (${esc(e.message)}).</div>`; }
 }
 
@@ -160,7 +224,7 @@ async function show(date) {
   LEDGER = LATEST_SITE.record?.ledger || [];            // the posted bets, results as of now (each day's rows)
   SITE_LEDGER = LATEST_SITE.record?.site_ledger || LEDGER;   // the season record (the Results page and the X update use it)
   const boardLink = () => { const f = getFilter(); $('board-link').href = f === 'all' ? 'points.html' : MODEL[f].page; };
-  filterSeg($('filter'), () => { renderBets(); boardLink(); });
+  filterSeg($('filter'), () => { renderBets(); boardLink(); if (LIVE_ON) liveTick(); });
   boardLink();
   statePicker($('state-sel'), () => renderBets());
   renderSeason();
