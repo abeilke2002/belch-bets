@@ -300,3 +300,83 @@ a.bklink .bk:hover { color: var(--ink); }
 footer { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; font-size: 12.5px; color: var(--muted); }
 footer a { color: var(--ink-2); }
 
+
+/* ---------- Today and Results pages (app.js) ---------- */
+/* Model colors: identity only (dots, chips, the selected filter). Green/red stay for wins/losses. */
+:root { --m-points: #e8a35c; --m-rebounds: #5fa8f0; --m-assists: #b58cf2; --m-all: #d7dbe1; }
+.mdot { width: 8px; height: 8px; border-radius: 2px; background: var(--mc, var(--m-all)); display: inline-block; flex: none; }
+.mchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.seg.filter button { display: inline-flex; align-items: center; gap: 7px; }
+.seg.filter button[aria-pressed="true"] .mdot { box-shadow: 0 0 0 1.5px var(--bg); }
+.pill { display: inline-block; min-width: 62px; text-align: center; padding: 3px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+.pill.win { background: rgba(92, 198, 140, .16); color: var(--win); }
+.pill.loss { background: rgba(238, 109, 100, .16); color: var(--loss); }
+.pill.other { background: #1a1f26; color: var(--muted); }
+.pill.pending { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-2); font-weight: 500; }
+
+.intro { padding-block: 34px 18px; display: grid; gap: 10px; }
+.intro .row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.intro h1 { font: 800 clamp(30px, 5.2vw, 46px)/1.04 var(--display); letter-spacing: -.02em; margin: 0; }
+.intro .sub { margin: 0; color: var(--ink-2); font-size: 15px; }
+.intro .small { margin: 0; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding-block: 4px 18px; }
+.page-sec { padding-block: 26px; border-top: 1px solid var(--line); display: grid; gap: 14px; min-width: 0; }
+.page-sec h2 { font: 700 19px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
+
+/* one row per bet: player | bet and book | result */
+.blist { display: grid; }
+.ghead { display: flex; align-items: baseline; gap: 10px; padding: 18px 0 6px; font: 700 15px/1.2 var(--display); }
+.ghead .mdot { align-self: center; }
+.ghead small { font: 400 13px/1 var(--body); color: var(--muted); }
+.brow { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.4fr) auto; gap: 4px 22px; align-items: center; padding: 13px 0; border-top: 1px solid var(--line); }
+.brow .pn { font: 700 17px/1.25 var(--display); }
+.brow .bl { font: 700 16px/1.3 var(--display); color: var(--accent); }
+.brow .bl .stake { color: var(--ink-2); font-weight: 500; }
+.brow .px { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 14px; color: var(--ink-2); margin-top: 3px; }
+.brow .px .price { font-weight: 600; color: var(--ink); }
+.brow .rs { text-align: right; display: grid; justify-items: end; gap: 3px; }
+.brow .rs .small { white-space: nowrap; }
+.brow.nobet { grid-template-columns: minmax(0, 1fr); color: var(--muted); font-size: 14px; }
+.nowtag { font-size: 12px; margin-top: 3px; }
+.nowtag.ok { color: var(--win); } .nowtag.gone { color: var(--loss); }
+@media (max-width: 640px) {
+  .brow { grid-template-columns: minmax(0, 1fr) auto; }
+  .brow > .bet { grid-column: 1; }
+  .brow > .rs { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+}
+.nightsum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; font-size: 15px; color: var(--ink-2); }
+.nightsum b { font: 700 18px/1.2 var(--display); color: var(--ink); }
+
+/* season-so-far strip */
+.sstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.scell { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; text-decoration: none; }
+.scell:hover { border-color: var(--mc, var(--muted)); }
+.scell .t { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.scell .u { font: 700 22px/1.15 var(--display); letter-spacing: -.01em; }
+.scell .k { font-size: 12.5px; color: var(--muted); }
+.more { font-size: 13.5px; color: var(--ink-2); }
+
+/* results: model x season table, bets by month */
+.figs2 { display: flex; flex-wrap: wrap; gap: 14px 40px; }
+.figs2 .fig .n { font-size: 26px; }
+.mswrap { overflow-x: auto; margin-inline: -2px; padding-inline: 2px; }
+.mstable td, .mstable th { padding-block: 10px; white-space: nowrap; }
+@media (max-width: 520px) { .mstable td, .mstable th { padding-inline: 5px; font-size: 13.5px; } .mstable .rowname { gap: 6px; } }
+.mstable th.r, .mstable td.r { text-align: right; }
+.mstable td.cell { cursor: pointer; border-radius: 0; }
+.mstable td.cell:hover { background: #11151b; }
+.mstable td.cell.sel { box-shadow: inset 0 -2px 0 var(--accent); color: var(--ink); }
+.mstable td.cell .u { font-weight: 700; }
+.mstable td.cell .k { display: block; font-size: 12px; color: var(--muted); }
+.mstable .rowname { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.plays2 .dhead { padding: 16px 0 6px; font-size: 13px; color: var(--muted); }
+.plays2 .brow { padding: 10px 0; }
+.plays2 .brow .pn { font-size: 15px; }
+.plays2 .brow .bl { font-size: 14.5px; color: var(--ink); font-weight: 600; }
+.plays2 .brow .px { font-size: 13px; margin-top: 1px; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 80ch; }
+
+/* Board pages: the model switch under the header */
+.mswitch a { text-decoration: none; display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.mswitch a[aria-current="page"] { background: var(--ink); color: var(--bg); }
+.mswitch a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

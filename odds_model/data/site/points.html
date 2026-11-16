@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="explain.css">
+<link rel="stylesheet" href="common.css">
 <style>
 /* One open column. Hierarchy from type size and space, not boxes. Accent only marks the bet. */
 :root {
@@ -322,16 +323,13 @@ footer a { color: var(--ink-2); }
   <header class="top">
     <nav class="sitenav" aria-label="Site">
       <a class="brand" href="./">The Noon <span>Line</span></a>
-      <a href="./">Home</a><a href="points.html" aria-current="page">Points</a><a href="rebounds.html">Rebounds</a><a href="assists.html">Assists</a>
+      <a href="./">Today</a><a href="results.html">Results</a><a href="points.html" aria-current="page">Board</a>
     </nav>
     <div class="controls">
       <span class="flag" id="flag" hidden>Replay of a past day</span>
-      <div class="seg" role="group" aria-label="View">
-        <button id="v-glance" aria-pressed="true">Glance</button><button id="v-deep" aria-pressed="false">Deep dive</button><button id="v-history" aria-pressed="false">History</button>
-      </div>
       <span class="daynav">
         <button class="icon" id="prev" aria-label="Previous day">‹</button>
-        <button class="textbtn" id="today">Today</button>
+        <button class="textbtn" id="today">Latest</button>
         <button class="icon" id="next" aria-label="Next day">›</button>
       </span>
       <a class="textbtn howlink" href="method.html">How it works</a>
@@ -339,13 +337,26 @@ footer a { color: var(--ink-2); }
   </header>
 
   <div id="banner"></div>
-  <div class="hero">
-    <div id="pick"></div>
+  <div class="intro">
+    <p class="small" id="dateline"></p>
+    <div class="row"><h1>Edge board</h1>
+      <nav class="seg mswitch" aria-label="Model"><a href="points.html" aria-current="page"><i class="mdot" style="--mc:var(--m-points)"></i>Points</a><a href="rebounds.html"><i class="mdot" style="--mc:var(--m-rebounds)"></i>Rebounds</a><a href="assists.html"><i class="mdot" style="--mc:var(--m-assists)"></i>Assists</a></nav></div>
+    <p class="sub">Every points prop, both sides: a bet when the edge at the best noon price is 2% or more, 1 unit each.</p>
   </div>
+  <div class="hero" hidden><div id="pick"></div></div>
   <div id="mine"></div>
-  <div class="season" id="season"></div>
+  <div class="season" id="season" hidden></div>
 
   <div class="deep" id="deep" hidden>
+    <section id="board-sec">
+      <div class="shead"><h2>Edge board</h2><p>Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
+      <table class="board">
+        <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
+        <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
+        <tbody id="board"></tbody>
+      </table>
+    </section>
+
     <section id="why-sec">
       <div class="shead"><h2 id="why-title">Why this bet</h2></div>
       <div class="why-wrap">
@@ -364,16 +375,8 @@ footer a { color: var(--ink-2); }
       <div id="who"></div>
     </section>
 
-    <section id="board-sec">
-      <div class="shead"><h2>Edge board</h2><p>Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
-      <table class="board">
-        <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
-        <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
-        <tbody id="board"></tbody>
-      </table>
-    </section>
 
-    <section id="season-sec">
+    <section id="season-sec" hidden>
       <div class="shead"><h2>Season</h2><p id="season-sub"></p></div>
       <div class="stats" id="stats"></div>
       <div class="two">
@@ -394,7 +397,7 @@ footer a { color: var(--ink-2); }
     </section>
   </div>
 
-  <div class="hist" id="hist" hidden>
+  <div class="hist" id="hist" hidden aria-hidden="true">
     <div class="scards" id="scards" role="group" aria-label="Season"></div>
     <section>
       <div class="shead"><h2 id="h-title"></h2><p id="h-note"></p></div>
@@ -1120,12 +1123,11 @@ function setView(v) {
   $('deep').hidden = v !== 'deep';
   $('hist').hidden = v !== 'history';
   document.body.dataset.view = v;
-  ['glance', 'deep', 'history'].forEach(k => $('v-' + k).setAttribute('aria-pressed', String(k === v)));
-  store.set('bb-view', v);
-  if (v === 'history') renderHistory();
+
 }
 
 function render() {
+  $('dateline').textContent = longDate(DATA.date);
   OPEN = null; renderPick(); renderMine(); renderSeasonStrip(); renderWhy(); renderWho(); renderBoard(); renderSeasonDeep(); renderSlate();
   const i = DATES.indexOf(DATA.date);
   $('prev').disabled = i <= 0;
@@ -1145,11 +1147,7 @@ async function show(date) {
 }
 
 (async () => {
-  const q = new URLSearchParams(location.search).get('view');
-  setView(q || store.get('bb-view') || 'glance');
-  $('v-glance').onclick = () => setView('glance');
-  $('v-deep').onclick = () => setView('deep');
-  $('v-history').onclick = () => setView('history');
+  setView('deep');                                   // the Board: the deep-dive tools only (today and results have their own pages)
   try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
   try { LATEST = (await getJSON('picks.json')).date; } catch (e) { LATEST = null; }
   await show(location.hash.slice(1) || null);

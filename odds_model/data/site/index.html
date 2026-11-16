@@ -10,222 +10,164 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="common.css">
-<style>
-/* Model colors: identity only (each model's bars and accents). Green/red stay for wins/losses. */
-:root { --m-points: #e8a35c; --m-rebounds: #5fa8f0; --m-assists: #b58cf2; --m-all: #d7dbe1; }
-.intro { padding-block: 40px 6px; }
-.intro .small { margin: 0 0 6px; }
-.intro h1 { font: 800 clamp(32px, 5.6vw, 50px)/1.02 var(--display); letter-spacing: -.02em; margin: 0; }
-.home section { padding-block: 30px; border-top: 1px solid var(--line); display: grid; gap: 18px; }
-.home section:first-of-type { border-top: 0; }
-.home h2 { font: 700 21px/1.2 var(--display); letter-spacing: -.01em; margin: 0; }
-
-/* Today */
-.models { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.mcard { border: 1px solid var(--line-2); border-top: 3px solid var(--mc); border-radius: 12px; padding: 14px 18px 16px; display: grid; gap: 8px; text-decoration: none; align-content: start; }
-.mcard:hover { border-color: var(--mc); }
-.mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
-.mcard .mn { font: 700 18px/1.1 var(--display); }
-.mcard .mr { font-size: 13px; color: var(--muted); }
-.mcard .today { font: 700 26px/1.1 var(--display); }
-.mcard .today small { font: 500 13px/1 var(--body); color: var(--muted); margin-left: 6px; }
-.mcard ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13.5px; color: var(--ink-2); }
-.mcard .go { font-size: 13px; color: var(--mc); }
-.waiting { color: var(--ink-2); font-size: 15px; }
-.waiting a { color: var(--accent); }
-.tgames { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 36px; }
-.tgame { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
-.tgame span:last-child { color: var(--muted); }
-
-/* Results: one card per model, a bar per season on a shared scale */
-.rcards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-.rcard { border: 1px solid var(--line-2); border-radius: 14px; padding: 18px 20px 20px; display: grid; gap: 16px; align-content: start; background: #0f1216; }
-.rcard header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.rcard .rn { font: 700 19px/1.1 var(--display); display: inline-flex; align-items: center; gap: 9px; }
-.rcard .rn i { width: 10px; height: 10px; border-radius: 3px; background: var(--mc); display: inline-block; }
-.rcard .rn a { text-decoration: none; }
-.rcard .rn a:hover { color: var(--mc); }
-.rcard .rr { font-size: 12.5px; color: var(--muted); }
-.rstats { display: flex; flex-wrap: wrap; gap: 12px 30px; }
-.rstat .v { white-space: nowrap; }
-.rstat .v { font: 700 19px/1.15 var(--display); letter-spacing: -.01em; }
-.rstat .l { font-size: 12px; color: var(--muted); }
-.bars { display: grid; gap: 11px; }
-.bar { display: grid; grid-template-columns: 70px minmax(0, 1fr) 66px; align-items: center; gap: 12px; font-size: 13px; }
-.bar .lbl { color: var(--ink-2); white-space: nowrap; }
-.bar .lbl small { display: block; font-size: 11px; color: var(--muted); }
-.track { height: 10px; border-radius: 999px; background: #1b2028; overflow: hidden; }
-.fill { height: 100%; border-radius: inherit; background: var(--mc); transform-origin: left center; animation: grow .8s cubic-bezier(.2, .7, .2, 1) both; }
-.fill.neg { background: var(--loss); }
-.bar .val { text-align: right; font-weight: 700; line-height: 1.15; }
-.bar .val small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
-.tw { position: relative; }
-/* 95% range whisker: a thin line with end caps over the bar; no left cap when the range reaches below zero */
-.ci { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--ink); opacity: .85; pointer-events: none;
-      box-shadow: 0 0 0 1px rgba(11, 13, 16, .75); }                      /* dark halo: readable on light fills and the dark track */
-.ci::before, .ci::after { content: ''; position: absolute; top: -5px; width: 2px; height: 12px; background: inherit;
-                          box-shadow: 0 0 0 1px rgba(11, 13, 16, .75); }
-.ci::before { left: 0; } .ci::after { right: 0; }
-.ci.open::before { display: none; }
-.bar .val.neg { color: var(--loss); }
-.bar .val.none { color: var(--muted); font-weight: 400; }
-@media (min-width: 760px) {
-  .rcard { grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); column-gap: 36px; align-items: center; }
-  .rcard header { grid-column: 1; flex-direction: column; align-items: flex-start; gap: 6px; }
-  .rcard .rstats { grid-column: 1; gap: 12px 24px; }
-  .rcard .bars { grid-column: 2; grid-row: 1 / span 2; }
-}
-@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@media (prefers-reduced-motion: reduce) { .fill { animation: none; } }
-.rnote { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 80ch; }
-</style>
 </head>
 <body>
 <div class="page">
   <header class="top">
     <nav class="sitenav" aria-label="Site">
       <a class="brand" href="./">The Noon <span>Line</span></a>
-      <a href="./" aria-current="page">Home</a><a href="points.html">Points</a><a href="rebounds.html">Rebounds</a><a href="assists.html">Assists</a>
+      <a href="./" aria-current="page">Today</a><a href="results.html">Results</a><a href="points.html" id="board-link">Board</a>
     </nav>
-    <div class="controls"><a class="textbtn" href="method.html">How it works</a></div>
+    <div class="controls">
+      <span class="daynav">
+        <button class="icon" id="prev" aria-label="Previous day">‹</button>
+        <button class="textbtn" id="latest">Latest</button>
+        <button class="icon" id="next" aria-label="Next day">›</button>
+      </span>
+      <a class="textbtn howlink" href="method.html">How it works</a>
+    </div>
   </header>
 
   <div id="banner"></div>
   <div class="intro">
     <p class="small" id="dateline"></p>
-    <h1>Noon Line Projections</h1>
+    <h1 id="title">Today's bets</h1>
+    <p class="sub" id="sub"></p>
   </div>
 
-  <div class="home">
-    <section>
-      <div class="shead"><h2>Today</h2><p id="today-sub"></p></div>
-      <div id="today"></div>
-    </section>
-    <section>
-      <div class="shead"><h2>Three models, one rule</h2><p>Every prop with a 2%+ edge at the best noon price, 1 unit each.</p></div>
-      <div class="rcards" id="results"></div>
-      <p class="rnote" id="corr-note" hidden>2026-27 rebounds and assists use the picks re-made after a model fix for Nov 7 and 8, not the bets posted those days.</p>
-      <p class="rnote">Past seasons are backtests: each model trained only on earlier seasons, with the same skips as the live site.
-        The line across each backtest bar is its 95% range (± under the units): how far luck alone can move a season with that many bets.
-        A range that starts at the bar's left edge reaches below zero. The three model cards share one bar scale; the combined card has its own.</p>
-    </section>
+  <div class="toolbar">
+    <div class="seg filter" id="filter" role="group" aria-label="Model"></div>
+    <div class="nightsum" id="night"></div>
   </div>
+
+  <div class="blist" id="bets"></div>
+
+  <section class="page-sec" id="tonight-sec" hidden>
+    <div class="shead"><h2 id="tonight-h">Tonight's games</h2><p id="tonight-sub"></p></div>
+    <div class="games" id="tonight"></div>
+  </section>
+
+  <section class="page-sec" id="season-sec">
+    <div class="shead"><h2>Season so far</h2><p id="season-sub"></p></div>
+    <div class="sstrip" id="season"></div>
+    <a class="more" href="results.html">Every bet, by night, and past seasons →</a>
+  </section>
 
   <footer>
     <span>Bets post around noon ET on game days. Results update the next morning. <a href="method.html">How it works</a></span>
     <span>Bet responsibly. Past results don't guarantee future ones.</span>
+    <label class="statepick" id="state">Your state, for sportsbook links <select id="state-sel" aria-label="Your state"></select></label>
   </footer>
 </div>
 
+<script src="app.js"></script>
 <script>
-const MODELS = [{ m: 'points', name: 'Points', page: 'points.html', file: 'seasons.json', unit: 'pts' },
-                { m: 'rebounds', name: 'Rebounds', page: 'rebounds.html', file: 'seasons_rebounds.json', unit: 'reb', note: 'Unders only' },
-                { m: 'assists', name: 'Assists', page: 'assists.html', file: 'seasons_assists.json', unit: 'ast' }];
-const $ = id => document.getElementById(id);
-const sgn = (v, d = 1) => { const a = Math.abs(v).toFixed(d); return (+a === 0 ? '' : v > 0 ? '+' : '−') + a; };
-const cls = v => Math.abs(v) < 0.05 ? '' : v > 0 ? 'pos' : 'neg';
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-const weekday = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
-const todayET = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());   // YYYY-MM-DD
-const seasonOf = d => { const [y, mo] = d.split('-').map(Number), s = mo >= 8 ? y : y - 1; return `${s}-${String((s + 1) % 100).padStart(2, '0')}`; };
-const marketOf = b => b.market || 'points';                      // bets from before markets existed are points
-async function getJSON(p) { const r = await fetch(p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' ' + r.status); return r.json(); }
+const { $, esc, sgn, odds, cls, cap, longDate, short, weekday, todayET, tipET, seasonOf, getJSON, MODELS, MODEL, marketOf,
+        settled, getFilter, filterSeg, book, statePicker, sum, pill, mchip } = NL;
+let DATA = null, LATEST = null, LATEST_SITE = null, DATES = [], LEDGER = [], SITE_LEDGER = [];
 
-function sum(bets) {
-  const L = bets.filter(b => b.result === 'win' || b.result === 'loss'), wins = L.filter(b => b.result === 'win').length;
-  const units = L.reduce((s, b) => s + b.units, 0), risked = L.reduce((s, b) => s + (b.stake ?? 1), 0);
-  return { n: L.length, wins, losses: L.length - wins, units, risked, roi: risked ? units / risked : 0 };
+// Why a model has no bets on the shown day (as the noon X post says)
+function noBetsReason(m) {
+  if ((DATA.message || '').startsWith('No bets: the site sits out')) return 'the site sits out the last two weeks of the season';
+  const board = m === 'points' ? DATA.board : DATA.markets?.[m]?.board;
+  if (!(DATA.games || []).length) return 'no games';
+  if (!board || !board.length) return `no ${m} lines posted`;
+  const top = board.filter(r => r.play !== 'skip');
+  return top.length ? `best eligible edge ${sgn(Math.max(...top.map(r => r.edge)) * 100)}%, under the 2% minimum`
+                    : 'every prop skipped (injury report, back-to-back)';
+}
+const result = p => LEDGER.find(b => b.date === DATA.date && b.player === p.player && marketOf(b) === marketOf(p) && b.side === p.side);
+const nowTag = p => !p.now ? '' : p.now.valid
+  ? `<div class="nowtag ok">Still a bet at ${esc(p.now.at)} odds: ${cap(p.now.side)} ${p.now.line} ${odds(p.now.price)} ${esc(p.now.book)}</div>`
+  : `<div class="nowtag gone">Not a bet at ${esc(p.now.at)} odds</div>`;
+
+function betRow(p) {
+  const M = MODEL[marketOf(p)], L = result(p), done = L && settled(L.result);
+  const stake = p.stake && p.stake !== 1 ? ` <span class="stake">· ${p.stake}u</span>` : '';
+  const tip = tipET(p.commence_time);
+  return `<div class="brow">
+    <div><div class="pn">${esc(p.player)}</div><div class="small">${esc(p.team)} vs ${esc(p.opp || p.opponent)}${tip ? ' · ' + tip : ''}</div></div>
+    <div class="bet"><div class="bl">${cap(p.side)} ${p.line} ${M.unit}${stake}</div>
+      <div class="px"><span class="price">${odds(p.price)}</span>${book(p.book, p.link)}</div>${nowTag(p)}</div>
+    <div class="rs">${pill(done ? L.result : null)}${done ? `<span class="small">${L.points != null ? `${L.points} ${M.unit} · ` : ''}<span class="${cls(L.units)}">${sgn(L.units, 2)}u</span></span>` : ''}</div>
+  </div>`;
 }
 
-// 95% range for a season's units. Bets on the same night move together, so each day's total counts as one draw:
-// total ± 1.96 × sd(day totals) × √days. Matches a by-day bootstrap within about 2u on the backtests.
-function unitsCI(bets) {
-  const by = {};
-  for (const b of bets) if (b.result === 'win' || b.result === 'loss') by[b.date] = (by[b.date] || 0) + b.units;
-  const d = Object.values(by), n = d.length;
-  if (n < 10) return null;
-  const tot = d.reduce((a, x) => a + x, 0), m = tot / n;
-  const pm = 1.96 * Math.sqrt(d.reduce((a, x) => a + (x - m) ** 2, 0) / (n - 1) * n);
-  return { lo: tot - pm, hi: tot + pm, pm };
-}
-
-function renderToday(site) {
-  const today = todayET();
-  $('dateline').textContent = longDate(today);
-  if (!site) return;
-  if (site.status === 'error' && site.date === today) $('banner').innerHTML = `<div class="banner">Today's update failed. ${esc(site.message)}</div>`;
-  if (site.date !== today) {                                     // picks.json still holds the last posted day
-    const G = site.tonight?.date === today ? site.tonight.games : [];  // the morning results run adds tonight's games
-    const b2b = G.flatMap(g => g.b2b || []);
-    const rested = g => [g.away, g.home].filter(t => !(g.b2b || []).includes(t));
-    $('today-sub').textContent = G.length ? `${G.length} game${G.length === 1 ? '' : 's'} tonight.` +
-      (b2b.length ? ` Not shown: ${b2b.join(', ')}, on a back-to-back (their players are skipped).` : '') : '';
-    const list = G.filter(g => rested(g).length).map(g => {
-      const r = rested(g);
-      return `<div class="tgame"><span>${esc(r.length === 2 ? `${g.away} at ${g.home}` : r[0])}</span><span>${esc(g.tip)}</span></div>`;
-    }).join('');
-    $('today').innerHTML = (list ? `<div class="tgames">${list}</div>` : '') +
-      `<p class="waiting">Today's bets post around noon ET. Last posted: <a href="points.html">${weekday(site.date)}'s picks</a>.</p>`;
-    return;
-  }
-  const picks = site.picks || [];
-  $('today-sub').textContent = picks.length ? `${picks.length} bet${picks.length === 1 ? '' : 's'} across the three models.` : (site.message || 'No bets today.');
-  const ledger = site.record?.ledger || [];
-  $('today').innerHTML = `<div class="models">${MODELS.map(M => {
-    const P = picks.filter(p => marketOf(p) === M.m);
-    const list = P.slice(0, 3).map(p => `<li>${esc(p.player)} · ${p.side === 'UNDER' ? 'U' : 'O'} ${p.line} ${M.unit}</li>`).join('');
-    return `<a class="mcard" href="${M.page}" style="--mc:var(--m-${M.m})"><span class="mn">${M.name}</span>${M.note ? `<span class="mr">${M.note}</span>` : ''}
-      <span class="today">${P.length}<small>bet${P.length === 1 ? '' : 's'}</small></span>
-      ${list ? `<ul>${list}${P.length > 3 ? `<li class="muted">+${P.length - 3} more</li>` : ''}</ul>` : ''}
-      <span class="go">See ${M.name.toLowerCase()} →</span></a>`;
-  }).join('')}</div>`;
-}
-
-async function renderResults(site) {
-  const ledger = site?.record?.site_ledger || site?.record?.ledger || [];
-  if (ledger.some(b => b.corrected)) $('corr-note').hidden = false;
-  const liveSeason = seasonOf(todayET());
-  const past = await Promise.all(MODELS.map(M => getJSON(M.file).then(d => d.seasons).catch(() => [])));
-  const seasons = [...new Set([liveSeason, ...past.flat().map(s => s.season)])].sort().reverse();
-  const betsFor = (i, season) => season === liveSeason ? ledger.filter(b => marketOf(b) === MODELS[i].m && seasonOf(b.date) === liveSeason)
-                                                       : (past[i].find(s => s.season === season)?.bets || []);
-  const row = (s, bets) => ({ season: s, t: sum(bets), ci: s === liveSeason ? null : unitsCI(bets) });   // ranges for backtests
-  const cards = MODELS.map((M, i) => ({ ...M, rows: seasons.map(s => row(s, betsFor(i, s))) }));
-  cards.push({ m: 'all', name: 'All three', rows: seasons.map(s => row(s, MODELS.flatMap((_, i) => betsFor(i, s)))) });
-  // the three models share one scale (comparable bars); the combined card has its own. The scale makes room for the ranges.
-  const big = rows => Math.max(1, ...rows.map(r => Math.max(Math.abs(r.t.units), r.ci ? r.ci.hi : 0)));
-  const modelScale = Math.max(...cards.filter(c => c.m !== 'all').map(c => big(c.rows)));
-  $('results').innerHTML = cards.map(c => {
-    const rows = c.rows, scale = c.m === 'all' ? big(rows) : modelScale;
-    const tot = rows.reduce((a, r) => ({ n: a.n + r.t.n, wins: a.wins + r.t.wins, units: a.units + r.t.units, risked: a.risked + r.t.risked }), { n: 0, wins: 0, units: 0, risked: 0 });
-    const roi = tot.risked ? tot.units / tot.risked : 0;            // per unit risked (rebounds 4%+ edges are 1.5u)
-    const stats = [[tot.n ? `${sgn(roi * 100)}%` : '–', 'ROI'], [`${tot.wins}–${tot.n - tot.wins}`, 'Record'],
-                   [`${sgn(tot.units)}u`, 'Units', cls(tot.units)], [tot.n ? `${(tot.wins / tot.n * 100).toFixed(1)}%` : '–', 'Win %']];
-    const bars = rows.map(r => {
-      const live = r.season === liveSeason, w = Math.abs(r.t.units) / scale * 100;
-      const ci = r.ci && r.t.units > 0 ? r.ci : null;
-      const val = r.t.n ? `<span class="val ${r.t.units < 0 ? 'neg' : ''}">${sgn(r.t.units)}u${ci ? `<small>± ${Math.round(ci.pm)}</small>` : ''}</span>` : '<span class="val none">–</span>';
-      const lo = ci ? Math.max(0, ci.lo) / scale * 100 : 0, hi = ci ? ci.hi / scale * 100 : 0;
-      const whisker = ci ? `<i class="ci${ci.lo < 0 ? ' open' : ''}" style="left:${lo.toFixed(1)}%;width:${(hi - lo).toFixed(1)}%"></i>` : '';
-      const tip = `${r.season}: ${r.t.wins}–${r.t.losses}, ${sgn(r.t.units)}u` + (r.ci ? `; 95% range ${sgn(r.ci.lo, 0)} to ${sgn(r.ci.hi, 0)}u` : '');
-      return `<div class="bar" title="${tip}">
-        <span class="lbl">${r.season}<small>${live ? 'live' : 'backtest'}</small></span>
-        <div class="tw"><div class="track"><div class="fill ${r.t.units < 0 ? 'neg' : ''}" style="width:${w.toFixed(1)}%"></div></div>${whisker}</div>${val}</div>`;
-    }).join('');
-    const title = c.page ? `<a href="${c.page}">${c.name}</a>` : c.name;
-    return `<article class="rcard" style="--mc:var(--m-${c.m})">
-      <header><span class="rn"><i></i>${title}</span><span class="rr">${c.note || (c.m === 'all' ? 'combined' : 'both sides')}</span></header>
-      <div class="rstats">${stats.map(([v, l, k]) => `<div class="rstat"><div class="v ${k || ''}">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
-      <div class="bars">${bars}</div></article>`;
+function renderBets() {
+  const f = getFilter(), picks = (DATA.picks || []).filter(p => f === 'all' || marketOf(p) === f);
+  const show = f === 'all' ? MODELS : [MODEL[f]];
+  $('bets').innerHTML = show.map(M => {
+    const P = picks.filter(p => marketOf(p) === M.m).sort((a, b) => b.edge - a.edge);
+    const head = f === 'all' ? `<div class="ghead"><i class="mdot" style="--mc:var(--m-${M.m})"></i>${M.name}<small>${P.length ? `${P.length} bet${P.length === 1 ? '' : 's'}` : ''}${M.m === 'rebounds' ? ' · unders only' : ''}</small></div>` : '';
+    const rows = P.length ? P.map(betRow).join('') : `<div class="brow nobet">No ${M.m} bets: ${esc(noBetsReason(M.m))}.</div>`;
+    return head + rows;
   }).join('');
+  // the night's total once every shown bet is settled
+  const R = picks.map(result).filter(Boolean), allDone = picks.length && R.length === picks.length && R.every(b => settled(b.result));
+  const t = sum(R);
+  $('night').innerHTML = !picks.length ? '' : allDone
+    ? `<span>Night</span><b>${t.wins}–${t.losses}</b><b class="${cls(t.units)}">${sgn(t.units, 2)}u</b>`
+    : `<span class="small">${R.filter(b => settled(b.result)).length ? 'Some results in. ' : ''}Results update the next morning.</span>`;
+}
+
+function renderHead() {
+  const today = todayET(), isLatest = DATA.date === LATEST, picks = DATA.picks || [];
+  $('dateline').textContent = longDate(DATA.date);
+  $('banner').innerHTML = DATA.status === 'error' ? `<div class="banner">This day's update failed. ${esc(DATA.message)}</div>` : '';
+  $('title').textContent = DATA.date === today ? "Today's bets" : isLatest && DATA.date < today ? `${weekday(DATA.date)}'s bets` : `Bets for ${short(DATA.date)}`;
+  const n = picks.length, by = MODELS.map(M => [M.name.toLowerCase(), picks.filter(p => marketOf(p) === M.m).length]).filter(x => x[1]);
+  const posted = DATA.updated ? ` Posted ${String(DATA.updated).replace(/^\d{4}-\d{2}-\d{2}\s*/, '')}.` : '';
+  $('sub').textContent = (n ? `${n} bet${n === 1 ? '' : 's'}: ${by.map(([k, v]) => `${v} ${k}`).join(', ')}.` : 'No bets this day.') + posted +
+    (isLatest && DATA.date < today ? " Today's bets post around noon ET." : '');
+  const i = DATES.indexOf(DATA.date);
+  $('prev').disabled = i <= 0; $('next').disabled = i < 0 || i >= DATES.length - 1; $('latest').disabled = isLatest;
+}
+
+function renderTonight() {
+  // mornings: the latest page is last night's, and the results run adds tonight's games
+  const today = todayET(), T = DATA.date === LATEST && DATA.date < today && LATEST_SITE?.tonight?.date === today ? LATEST_SITE.tonight : null;
+  const G = T ? T.games : DATA.date === today ? (DATA.games || []) : [];
+  $('tonight-sec').hidden = !G.length;
+  if (!G.length) return;
+  const b2b = G.flatMap(g => g.b2b || []);
+  $('tonight-h').textContent = T ? "Tonight's games" : `${G.length} game${G.length === 1 ? '' : 's'} today`;
+  $('tonight-sub').textContent = (T ? 'Bets post around noon ET.' : '') + (b2b.length ? ` On a back-to-back (players skipped): ${b2b.join(', ')}.` : '');
+  $('tonight').innerHTML = G.map(g => `<div class="game"><span>${esc(g.away)} at ${esc(g.home)}</span><span>${esc(g.tip || '')}</span></div>`).join('');
+}
+
+function renderSeason() {
+  const live = seasonOf(LATEST || todayET()), L = SITE_LEDGER.filter(b => seasonOf(b.date) === live);
+  const cells = [...MODELS.map(M => ({ m: M.m, name: M.name, t: sum(L.filter(b => marketOf(b) === M.m)) })), { m: 'all', name: 'All models', t: sum(L) }];
+  $('season-sub').textContent = `${live}, every bet at the noon price${L.some(b => b.corrected) ? ' (Nov 7 and 8 as re-made after a model fix)' : ''}.`;
+  $('season').innerHTML = cells.map(c => `<a class="scell" href="results.html" data-f="${c.m}" style="--mc:var(--m-${c.m})">
+    <span class="t"><i class="mdot"></i>${c.name}</span>
+    <span class="u ${c.t.n ? cls(c.t.units) : 'muted'}">${c.t.n ? sgn(c.t.units) + 'u' : '–'}</span>
+    <span class="k">${c.t.n ? `${c.t.wins}–${c.t.losses} · ${sgn(c.t.roi * 100)}% return` : 'no settled bets yet'}</span></a>`).join('');
+  $('season').querySelectorAll('.scell').forEach(a => a.onclick = () => NL.store.set('bb-filter', a.dataset.f));
+}
+
+async function show(date) {
+  try {
+    DATA = date && date !== LATEST ? await getJSON(`history/${date}.json`) : LATEST_SITE;
+    history.replaceState(null, '', !date || DATA.date === LATEST ? location.pathname : '#' + date);
+    renderHead(); renderBets(); renderTonight();
+  } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load that day (${esc(e.message)}).</div>`; }
 }
 
 (async () => {
-  let site = null;
-  try { site = await getJSON('picks.json'); } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load today's data.</div>`; }
-  renderToday(site);
-  renderResults(site);
+  try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
+  try { LATEST_SITE = await getJSON('picks.json'); LATEST = LATEST_SITE.date; } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load the data.</div>`; return; }
+  LEDGER = LATEST_SITE.record?.ledger || [];            // the posted bets, results as of now (each day's rows)
+  SITE_LEDGER = LATEST_SITE.record?.site_ledger || LEDGER;   // the season record (the Results page and the X update use it)
+  const boardLink = () => { const f = getFilter(); $('board-link').href = f === 'all' ? 'points.html' : MODEL[f].page; };
+  filterSeg($('filter'), () => { renderBets(); boardLink(); });
+  boardLink();
+  statePicker($('state-sel'), () => renderBets());
+  renderSeason();
+  await show(location.hash.slice(1) || null);
+  $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
+  $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);
+  $('latest').onclick = () => show(null);
 })();
 </script>
 </body>

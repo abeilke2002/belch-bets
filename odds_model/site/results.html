@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b0d10">
+<title>Results · The Noon Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <nav class="sitenav" aria-label="Site">
+      <a class="brand" href="./">The Noon <span>Line</span></a>
+      <a href="./">Today</a><a href="results.html" aria-current="page">Results</a><a href="points.html" id="board-link">Board</a>
+    </nav>
+    <div class="controls"><a class="textbtn howlink" href="method.html">How it works</a></div>
+  </header>
+
+  <div id="banner"></div>
+  <div class="intro">
+    <h1>Results</h1>
+    <p class="sub">Every bet, wins and losses, at the noon price. Past seasons are backtests: each model trained only on earlier seasons, same rules as the live site.</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="seg filter" id="filter" role="group" aria-label="Model"></div>
+    <div class="seg" id="seasons" role="group" aria-label="Season"></div>
+  </div>
+
+  <section class="page-sec">
+    <div class="shead"><h2 id="sel-title"></h2><p id="sel-note"></p></div>
+    <div class="figs2" id="figs"></div>
+    <p class="sub-h">Running total for the season, in units (one point per night)</p>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <section class="page-sec">
+    <div class="shead"><h2>By model and season</h2><p>Units, with the record underneath. Tap a cell to show it.</p></div>
+    <div class="mswrap"><table class="mstable"><thead id="ms-head"></thead><tbody id="ms-body"></tbody></table></div>
+    <p class="note" id="ci-note">±N is the 95% range for a backtest season: how far luck alone can move a season with that many bets.</p>
+  </section>
+
+  <section class="page-sec">
+    <div class="shead"><h2>Every bet</h2><p id="plays-sub"></p></div>
+    <div id="plays"></div>
+  </section>
+
+  <footer>
+    <span>Results update each morning. <a href="method.html">How it works</a></span>
+    <span>Bet responsibly. Past results don't guarantee future ones.</span>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+<script>
+const { $, esc, sgn, pct, odds, cls, cap, short, monthName, todayET, seasonOf, store, getJSON, MODELS, MODEL, marketOf,
+        settled, getFilter, filterSeg, sum, unitsCI, drawChart, pill, mchip } = NL;
+let LIVE_SEASON = null, LIVE = [], PAST = {}, SEASONS = [], SEASON = null, CORRECTED = false;
+
+const betsFor = (f, season) => {
+  const of = m => season === LIVE_SEASON ? LIVE.filter(b => marketOf(b) === m) : (PAST[m]?.[season]?.bets || []);
+  return (f === 'all' ? MODELS.flatMap(M => of(M.m)) : of(f)).slice().sort((a, b) => a.date.localeCompare(b.date));
+};
+const isLive = s => s === LIVE_SEASON;
+const label = f => f === 'all' ? 'All models' : MODEL[f].name;
+
+function renderSeasons() {
+  $('seasons').innerHTML = SEASONS.map(s => `<button type="button" data-s="${s}" aria-pressed="${s === SEASON}">${s}${isLive(s) ? ' · live' : ''}</button>`).join('');
+  $('seasons').querySelectorAll('button').forEach(b => b.onclick = () => { SEASON = b.dataset.s; store.set('bb-season', SEASON); renderAll(); });
+}
+
+function renderSelected() {
+  const f = getFilter(), B = betsFor(f, SEASON), t = sum(B), ci = isLive(SEASON) ? null : unitsCI(B);
+  $('sel-title').textContent = `${label(f)} · ${SEASON}${isLive(SEASON) ? '' : ' backtest'}`;
+  $('sel-note').textContent = isLive(SEASON)
+    ? `The bets the site posted this season${CORRECTED && f !== 'points' ? ', with Nov 7 and 8 as re-made after a model fix' : ''}.`
+    : (f === 'all' ? 'All three models\' backtests together.' : (PAST[f]?.[SEASON]?.note || '').split('. Retrained')[0] + '.');
+  const figs = t.n ? [[`${sgn(t.units)}u`, 'units', cls(t.units)], [`${t.wins}–${t.losses}`, 'record'], [pct(t.wins / t.n), 'win rate'],
+                      [`${sgn(t.roi * 100)}%`, 'return per unit risked'], ...(ci ? [[`± ${Math.round(ci.pm)}u`, '95% range']] : [])]
+                   : [['–', 'no settled bets yet']];
+  $('figs').innerHTML = figs.map(([v, k, c]) => `<div class="fig"><span class="n ${c || ''}">${v}</span><span class="k">${k}</span></div>`).join('');
+  drawChart(B, $('chart'));
+}
+
+function renderTable() {
+  const f = getFilter(), rows = [...MODELS.map(M => M.m), 'all'];
+  $('ms-head').innerHTML = `<tr><th>Model</th>${SEASONS.map(s => `<th class="r">${s}<span class="small" style="display:block;font-weight:400">${isLive(s) ? 'live' : 'backtest'}</span></th>`).join('')}</tr>`;
+  $('ms-body').innerHTML = rows.map(m => `<tr><td><span class="rowname"><i class="mdot" style="--mc:var(--m-${m})"></i>${label(m)}</span></td>${SEASONS.map(s => {
+    const B = betsFor(m, s), t = sum(B), ci = isLive(s) ? null : unitsCI(B);
+    return `<td class="r cell${m === f && s === SEASON ? ' sel' : ''}" data-m="${m}" data-s="${s}" title="Show ${label(m)} ${s}">
+      ${t.n ? `<span class="u ${cls(t.units)}">${sgn(t.units)}u</span><span class="k">${t.wins}–${t.losses}${ci ? ` · ±${Math.round(ci.pm)}` : ''}</span>` : '<span class="muted">–</span>'}</td>`;
+  }).join('')}</tr>`).join('');
+  $('ms-body').querySelectorAll('td.cell').forEach(td => td.onclick = () => {
+    store.set('bb-filter', td.dataset.m); SEASON = td.dataset.s; store.set('bb-season', SEASON);
+    filterSeg($('filter'), renderAll); renderAll();
+  });
+}
+
+function renderPlays() {
+  const f = getFilter(), B = betsFor(f, SEASON).slice().reverse(), unit = b => MODEL[marketOf(b)].unit;
+  $('plays-sub').textContent = B.length ? `${B.length} bets, newest first, by month.` : '';
+  const months = {};
+  B.forEach(b => (months[b.date.slice(0, 7)] ||= []).push(b));
+  $('plays').innerHTML = Object.entries(months).map(([mo, bets], i) => {
+    const t = sum(bets), days = {};
+    bets.forEach(b => (days[b.date] ||= []).push(b));
+    const body = Object.entries(days).map(([d, D]) => {
+      const u = sum(D), open = D.some(b => !settled(b.result));
+      const head = `${short(d)} · ${u.n ? `${u.wins}–${u.losses} · <span class="${cls(u.units)}">${sgn(u.units, 2)}u</span>` : ''}${open ? `${u.n ? ' · ' : ''}pending` : ''}`;
+      return `<div class="dhead">${head}</div>` + D.map(b => `<div class="brow">
+          <div><div class="pn">${esc(b.player)}${b.corrected ? ' <span class="small">· re-made</span>' : ''}</div>
+            <div class="small">${f === 'all' ? mchip(marketOf(b)) + ' · ' : ''}${esc(b.team)} vs ${esc(b.opp ?? b.opponent)}</div></div>
+          <div class="bet"><div class="bl">${cap(b.side)} ${b.line} ${unit(b)}${b.stake && b.stake !== 1 ? ` <span class="stake">· ${b.stake}u</span>` : ''}</div>
+            <div class="px"><span class="price">${odds(b.price)}</span><span>${esc(b.book)}</span></div></div>
+          <div class="rs">${pill(b.result)}${settled(b.result) ? `<span class="small">${b.points != null ? `${b.points} ${unit(b)} · ` : ''}<span class="${cls(b.units)}">${sgn(b.units, 2)}u</span></span>` : ''}</div></div>`).join('');
+    }).join('');
+    return `<details class="month"${i === 0 ? ' open' : ''}><summary><span class="t">${monthName(mo)}</span>
+      <span class="m">${t.wins}–${t.losses} · <span class="${cls(t.units)}">${sgn(t.units, 2)}u</span></span></summary>
+      <div class="blist plays2">${body}</div></details>`;
+  }).join('') || '<p class="muted">No bets yet.</p>';
+}
+
+function renderAll() {
+  renderSeasons(); renderSelected(); renderTable(); renderPlays();
+  const f = getFilter(); $('board-link').href = f === 'all' ? 'points.html' : MODEL[f].page;
+}
+
+(async () => {
+  let site = null;
+  try { site = await getJSON('picks.json'); } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load this season's bets.</div>`; }
+  LIVE_SEASON = seasonOf(site?.date || todayET());
+  LIVE = (site?.record?.site_ledger || site?.record?.ledger || []).filter(b => seasonOf(b.date) === LIVE_SEASON);
+  CORRECTED = LIVE.some(b => b.corrected);
+  const past = await Promise.all(MODELS.map(M => getJSON(M.file).then(d => d.seasons).catch(() => [])));
+  MODELS.forEach((M, i) => PAST[M.m] = Object.fromEntries(past[i].map(s => [s.season, s])));
+  SEASONS = [...new Set([LIVE_SEASON, ...past.flat().map(s => s.season)])].sort().reverse();
+  const saved = store.get('bb-season');
+  SEASON = SEASONS.includes(saved) ? saved : LIVE_SEASON;
+  filterSeg($('filter'), renderAll);
+  renderAll();
+  let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(renderSelected, 150); });   // the chart fits its width
+})();
+</script>
+</body>
+</html>

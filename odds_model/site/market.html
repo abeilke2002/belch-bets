@@ -16,7 +16,7 @@
 .mhead { padding-block: 40px 8px; display: grid; gap: 10px; }
 .mhead h1 { font: 800 clamp(34px, 6vw, 52px)/1.02 var(--display); letter-spacing: -.02em; margin: 0; }
 .mhead p { margin: 0; color: var(--muted); max-width: 64ch; }
-.mhead .rule { color: var(--accent); font-weight: 600; }
+.mhead .rule, .intro .rule { color: var(--accent); font-weight: 600; }
 .bets { display: grid; gap: 0; }
 .betrow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); }
 .betrow:last-child { border-bottom: 1px solid var(--line); }
@@ -47,12 +47,9 @@
   <header class="top">
     <nav class="sitenav" aria-label="Site">
       <a class="brand" href="./">The Noon <span>Line</span></a>
-      <a href="./">Home</a><a href="points.html">Points</a><a href="rebounds.html">Rebounds</a><a href="assists.html">Assists</a>
+      <a href="./">Today</a><a href="results.html">Results</a><a href="__MARKET__.html" aria-current="page">Board</a>
     </nav>
     <div class="controls">
-      <div class="seg" role="group" aria-label="View">
-        <button id="v-today" aria-pressed="true">Today</button><button id="v-deep" aria-pressed="false">Deep dive</button><button id="v-history" aria-pressed="false">History</button>
-      </div>
       <span class="daynav" id="daynav">
         <button class="icon" id="prev" aria-label="Previous day">‹</button>
         <button class="textbtn" id="today">Latest</button>
@@ -63,14 +60,15 @@
   </header>
 
   <div id="banner"></div>
-  <div class="mhead">
+  <div class="intro">
     <p class="small" id="dateline"></p>
-    <h1 id="title">__TITLE__</h1>
-    <p><span class="rule" id="rule"></span> <span id="rulenote"></span></p>
+    <div class="row"><h1 id="title">Edge board</h1>
+      <nav class="seg mswitch" aria-label="Model" id="mswitch"><a href="points.html"><i class="mdot" style="--mc:var(--m-points)"></i>Points</a><a href="rebounds.html"><i class="mdot" style="--mc:var(--m-rebounds)"></i>Rebounds</a><a href="assists.html"><i class="mdot" style="--mc:var(--m-assists)"></i>Assists</a></nav></div>
+    <p class="sub"><span class="rule" id="rule"></span> <span id="rulenote"></span></p>
   </div>
 
   <div id="mine"></div>
-  <div class="mview" id="today-view">
+  <div class="mview" id="today-view" hidden>
     <section>
       <div class="shead"><h2 id="bets-title">Today's bets</h2><p id="bets-sub"></p></div>
       <div class="bets" id="bets"></div>
@@ -83,6 +81,15 @@
   </div>
 
   <div class="mview deep" id="deep" hidden>
+    <section id="board-sec">
+      <div class="shead"><h2>Edge board</h2><p id="board-sub">Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
+      <table class="board">
+        <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
+        <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
+        <tbody id="board"></tbody>
+      </table>
+    </section>
+
     <section id="why-sec">
       <div class="shead"><h2 id="why-title">Why this bet</h2></div>
       <div class="ctl">
@@ -99,14 +106,6 @@
       <div id="who"></div>
     </section>
 
-    <section id="board-sec">
-      <div class="shead"><h2>Edge board</h2><p id="board-sub">Tap a player to change his minutes or try a profit boost. Tap a logo to bet. <button class="textbtn" id="board-reset" type="button" hidden>Clear my minutes</button></p></div>
-      <table class="board">
-        <colgroup><col class="c1"><col class="c2"><col class="cp"><col class="c3"><col class="c4"></colgroup>
-        <thead><tr><th>Player</th><th>Bet</th><th class="r">Chance</th><th class="r">Edge</th><th>Decision</th></tr></thead>
-        <tbody id="board"></tbody>
-      </table>
-    </section>
   </div>
 
   <div class="hist" id="hist" hidden>
@@ -132,7 +131,7 @@
 <script>
 const MARKET = '__MARKET__';
 const UNIT = { rebounds: 'rebounds', assists: 'assists' }[MARKET];
-const RULE = { rebounds: ['Unders only.', 'Every rebound under with a 2%+ edge at the best noon price, 1 unit each. The backtest\'s rebound overs lost money, so the model only bets unders.'],
+const RULE = { rebounds: ['Unders only.', 'Every rebound under with a 2%+ edge at the best noon price: 1 unit, 1.5 when the edge is 4%+. The backtest\'s rebound overs lost money, so the model only bets unders.'],
                assists: ['Both sides.', 'Every assists prop with a 2%+ edge at the best noon price, over or under, 1 unit each.'] }[MARKET];
 const $ = id => document.getElementById(id);
 const pct = (v, d = 1) => (v * 100).toFixed(d) + '%';
@@ -638,8 +637,6 @@ function setView(v) {
   VIEW = v;
   $('today-view').hidden = v !== 'today'; $('deep').hidden = v !== 'deep'; $('hist').hidden = v !== 'history';
   $('daynav').hidden = v === 'history'; $('mine').hidden = v === 'history';
-  for (const k of ['today', 'deep', 'history']) $('v-' + k).setAttribute('aria-pressed', String(v === k));
-  store.set('bb-mview', v);
   if (v === 'history') renderHistory();
 }
 async function show(date) {
@@ -654,7 +651,6 @@ async function show(date) {
   } catch (e) { $('banner').innerHTML = `<div class="banner">Couldn't load the data (${esc(e.message)}).</div>`; }
 }
 (async () => {
-  const wantHistory = location.search.includes('view=history');           // read before show() rewrites the address
   [$('rule').textContent, $('rulenote').textContent] = RULE;
   try { DATES = await getJSON('history/index.json'); } catch (e) { DATES = []; }
   try { const p = await getJSON('picks.json'); LATEST = p.date; LIVE = (p.record?.site_ledger || p.record?.ledger || []).filter(mine).sort((a, b) => a.date.localeCompare(b.date)); } catch (e) {}
@@ -662,12 +658,12 @@ async function show(date) {
   $('prev').onclick = () => show(DATES[DATES.indexOf(DATA.date) - 1]);
   $('next').onclick = () => show(DATES[DATES.indexOf(DATA.date) + 1]);
   $('today').onclick = () => show(null);
-  $('v-today').onclick = () => setView('today'); $('v-deep').onclick = () => setView('deep'); $('v-history').onclick = () => setView('history');
+  $('mswitch').querySelector(`a[href="${MARKET}.html"]`)?.setAttribute('aria-current', 'page');
   document.querySelectorAll('#boost button').forEach(btn => btn.addEventListener('click', () => setBoost(+btn.dataset.b)));
   const sel = $('state-sel');
   sel.innerHTML += STATES.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
   sel.value = userState(); sel.onchange = () => { store.set('bb-state', sel.value); renderToday(); renderDeep(); };
-  setView(wantHistory ? 'history' : store.get('bb-mview') === 'deep' ? 'deep' : 'today');
+  setView('deep');                                   // the Board: the deep-dive tools only (today and results have their own pages)
 })();
 </script>
 </body>

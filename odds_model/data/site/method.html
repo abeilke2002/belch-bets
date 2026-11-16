@@ -31,6 +31,7 @@ a { color: var(--amber); }
 .brand span { color: var(--muted); font-size: 13px; }
 .navlink { font: 600 13px/1 var(--body); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 11px; text-decoration: none; }
 .navlink:hover { border-color: var(--amber); }
+.navlinks { display: inline-flex; gap: 2px 14px; flex-wrap: wrap; }
 
 .layout { max-width: 1180px; margin: 0 auto; padding-inline: 18px; padding-block: 28px 64px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; align-items: start; }
 @media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 20px; } .toc { position: static !important; } }
@@ -102,7 +103,7 @@ section > h2 .step { font: 500 13px/1 var(--body); color: var(--muted); }
 
 <div class="topbar"><div class="in">
   <a class="brand" href="./"><b>The Noon <span>Line</span></b><span>How it works</span></a>
-  <a class="navlink" href="./">← Home</a>
+  <span class="navlinks"><a class="navlink" href="./">Today</a><a class="navlink" href="results.html">Results</a><a class="navlink" href="points.html">Board</a></span>
 </div></div>
 
 <div class="layout">
@@ -284,7 +285,7 @@ edge = P(side) − break-even(best price)</div>
       <p>This is a backtest: the rule replayed on three past seasons, using only noon information and models that hadn't
         seen the season being tested (for 2023-24, the over/under model was trained on the later seasons). It is not live
         betting. Small changes to the model move these numbers a lot, so each one is the average of 10 retrainings.
-        The History tab lists every bet from one of those runs. All seasons follow today's rules, including the April
+        The <a href="results.html">Results</a> page lists every bet from one of those runs. All seasons follow today's rules, including the April
         sit-out and the after-a-trade rule. Both were found by studying these same seasons, so these totals are
         optimistic; the live record is the real test.</p>
       <div class="card tablewrap">
