@@ -10,8 +10,7 @@ Credentials (GitHub secrets), either kind; without them nothing is posted:
   OAuth 1.0a: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET.
 Noon: one post per model, each bet as player, side, line and sportsbook (no projections or records); a model with no
 bets gets a short "No bets today" post saying why. 9 AM: one model update with each
-model's units last night and on the season, and all models together (the site's ledger, so the two agree); on Mondays
-also the weekly scorecard. Each post goes out once (data/live/x_posted.json); nothing on days without games; the
+model's units last night and on the season, and all models together (the site's ledger, so the two agree). Each post goes out once (data/live/x_posted.json); nothing on days without games; the
 update only once the night's bets are all settled; text only, no site link (the site is private, and a link costs more per post).
 
     python post_x.py --dry-run       # print what today's posts would say
@@ -30,8 +29,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
-from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date
 
 from config import DATA
 
@@ -50,15 +48,6 @@ STAT = {'points': 'pts', 'rebounds': 'reb', 'assists': 'ast'}
 stat = lambda b: STAT.get(b.get('market') or 'points', 'pts')        # bets before markets existed are points
 units = lambda v: (lambda r: f"{'+' if r >= 0 else '-'}{abs(r):.1f}u")(round(v, 1) + 0.0)        # rounded first: no '-0.0u'
 day_label = lambda d: f"{date.fromisoformat(d):%a %b} {date.fromisoformat(d).day}"
-
-
-def record(bets, pct=True):
-    """'14-12 · +1.8u (+5.2%)' over settled bets (pushes and voids count toward units, not the record)."""
-    s = [b for b in bets if b.get('result') in SETTLED]
-    w, l = sum(b['result'] == 'win' for b in s), sum(b['result'] == 'loss' for b in s)
-    u = sum(b['units'] or 0 for b in s)
-    risked = sum(b['stake'] for b in s if b['result'] in ('win', 'loss', 'push'))
-    return f"{w}-{l} · {units(u)}" + (f" ({u / risked:+.1%})" if pct and risked else '')
 
 
 BOOK = {'DraftKings': 'DK', 'FanDuel': 'FD', 'BetMGM': 'MGM', 'Caesars': 'CZR'}
@@ -113,24 +102,6 @@ def night(site, market=None):
     bets = [b for b in ledger_of(site) if b['date'] == site['date'] and (market is None or market_of(b) == market)
             and not (b.get('added') and b.get('result') not in SETTLED)]       # an added bet that can't be graded never holds up a post
     return bets if bets and all(b.get('result') in SETTLED for b in bets) else []
-
-
-def week_text(ledger, monday):
-    """The Monday scorecard for the 7 days before `monday`: record and units, season, line movement."""
-    start = (date.fromisoformat(monday) - timedelta(days=7)).isoformat()
-    week = [b for b in ledger if start <= b['date'] < monday and b.get('result') in SETTLED]
-    season = [b for b in ledger if b['date'] < monday]
-    s, e = date.fromisoformat(start), date.fromisoformat(monday) - timedelta(days=1)
-    span = f"{s:%b} {s.day}-{e.day}" if s.month == e.month else f"{s:%b} {s.day}-{e:%b} {e.day}"
-    lines = [f"Week of {span}: {record(week)}", f"Season: {record(season)}"]
-    moved = [b for b in season if b.get('clv') is not None and b['clv'] != 0]
-    if moved:
-        ours = sum(b['clv'] > 0 for b in moved)
-        lines.append(f"Line moved our way after the pick: {ours} of {len(moved)} ({ours / len(moved):.0%})")
-    best = max(week, key=lambda b: b['units'] or 0)
-    if (best['units'] or 0) > 0:
-        lines.append(f"Best hit: {best['player']} {side(best)} {best['line']:g} {stat(best)} ({best['points']:g})")
-    return '\n'.join(['The Noon Line · weekly scorecard', ''] + lines + ['', 'Every bet counted, wins and losses.', TAGS_RESULTS])[:LIMIT]
 
 
 def update_text(site):
@@ -193,8 +164,8 @@ def post_picks(site):
     return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m)) for m, _ in MODELS)
 
 
-def post_results(site, today=None):
-    """9 AM: the model update for last night (once its bets are all settled); on Mondays also the weekly scorecard."""
+def post_results(site):
+    """9 AM: the model update for last night (once its bets are all settled)."""
     done = posted_keys()
     if 'results:' + site['date'] in done or any(f"results:{site['date']}:{m}" in done for m, _ in MODELS):
         out = [f"X: already posted results for {site['date']}"]            # the old per-model results format
@@ -202,12 +173,6 @@ def post_results(site, today=None):
         out = [post_once('update:' + site['date'], update_text(site))]
     else:
         out = ['X: no settled bets for that night, nothing posted']
-    today = today or datetime.now(ZoneInfo('America/New_York')).date()
-    if today.weekday() == 0:
-        monday, ledger = today.isoformat(), site_ledger_of(site)
-        start = (today - timedelta(days=7)).isoformat()
-        if any(start <= b['date'] < monday and b.get('result') in SETTLED for b in ledger):
-            out.append(post_once('week:' + monday, week_text(ledger, monday)))
     return '; '.join(out)
 
 
@@ -238,6 +203,5 @@ if __name__ == '__main__':
     elif '--dry-run' in sys.argv:
         print(picks_text(site), '\n=====')
         print(update_text(site) if night(site) else 'update: nothing settled for that night', '\n---')
-        print(week_text(site_ledger_of(site), sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
     else:
         print(post_picks(site))
