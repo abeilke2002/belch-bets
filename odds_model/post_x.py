@@ -117,6 +117,122 @@ def update_text(site):
     return '\n'.join([f"The Noon Line · Model update · {day_label(site['date'])}", '', *lines, '', TAGS_RESULTS])
 
 
+def oauth_header(method, url, keys, params=None):
+    """OAuth 1.0a (HMAC-SHA1) header. A JSON body is not part of the signature; `params` (query or form fields)
+    would be (used to check it against the worked example in X's OAuth docs, signature hCtSmYh+iHYCEqBWrE7C7hYmtUk=)."""
+    q = lambda s: urllib.parse.quote(str(s), safe='~')
+    p = {'oauth_consumer_key': keys['X_API_KEY'], 'oauth_nonce': secrets.token_hex(16),
+         'oauth_signature_method': 'HMAC-SHA1', 'oauth_timestamp': str(int(time.time())),
+         'oauth_token': keys['X_ACCESS_TOKEN'], 'oauth_version': '1.0'}
+    signed = {**p, **(params or {})}
+    base = '&'.join([method, q(url), q('&'.join(f'{q(k)}={q(v)}' for k, v in sorted(signed.items())))])
+    key = f"{q(keys['X_API_SECRET'])}&{q(keys['X_ACCESS_SECRET'])}"
+    p['oauth_signature'] = base64.b64encode(hmac.new(key.encode(), base.encode(), hashlib.sha1).digest()).decode()
+    return 'OAuth ' + ', '.join(f'{q(k)}="{q(v)}"' for k, v in sorted(p.items()))
+
+
+def _crypt(text, decrypt=False):
+    """AES-256 with the X_TOKEN_KEY secret (openssl), base64 on one line."""
+    return subprocess.run(['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-salt', '-a', '-A', *(['-d'] if decrypt else []),
+                           '-pass', 'env:X_TOKEN_KEY'], input=text, capture_output=True, text=True, check=True).stdout
+
+
+def oauth2_bearer():
+    """A fresh OAuth 2.0 access token. Uses the saved refresh token unless the X_REFRESH_TOKEN secret has changed since
+    it was saved, then stores the new (rotated) refresh token before returning."""
+    import requests
+    seed = hashlib.sha256(os.environ['X_REFRESH_TOKEN'].encode()).hexdigest()[:16]
+    saved = json.loads(_crypt(TOKEN_FILE.read_text(), decrypt=True)) if TOKEN_FILE.exists() else {}
+    refresh = saved['refresh'] if saved.get('seed') == seed else os.environ['X_REFRESH_TOKEN']
+    cid = os.environ['X_CLIENT_ID']
+    r = requests.post(TOKEN_URL, data={'grant_type': 'refresh_token', 'refresh_token': refresh, 'client_id': cid},
+                      auth=(cid, os.environ['X_CLIENT_SECRET']), timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(f'token refresh failed ({r.status_code}): {r.text[:200]}')
+    tok = r.json()
+    global SCOPES
+    SCOPES = tok.get('scope', '')                       # e.g. 'tweet.write users.read tweet.read offline.access'
+    TOKEN_FILE.parent.mkdir(exist_ok=True)
+    TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
+    return tok['access_token']
+
+
+REDIRECT = 'https://x.com/NoonLineNBA'                     # the app's callback URI (must match it exactly)
+
+
+def authorize(code, verifier):
+    """Swap an authorization code (from the consent link, PKCE 'plain') for tokens that can post, and save the refresh
+    token so the next post uses it (seeded to the current X_REFRESH_TOKEN secret). Returns the granted scopes."""
+    import requests
+    cid = os.environ['X_CLIENT_ID']
+    r = requests.post(TOKEN_URL, data={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT,
+                                       'code_verifier': verifier, 'client_id': cid},
+                      auth=(cid, os.environ['X_CLIENT_SECRET']), timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(f"code exchange failed ({r.status_code}): {' '.join(r.text.split())[:300]}")
+    tok = r.json()
+    seed = hashlib.sha256(os.environ['X_REFRESH_TOKEN'].encode()).hexdigest()[:16]
+    TOKEN_FILE.parent.mkdir(exist_ok=True)
+    TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
+    return tok.get('scope', '')
+
+
+def connect(repo='abeilke2002/belch-bets', client_id='Ri1IdEtoWXFPckxteEFkR1RrRUQ6MTpjaQ'):
+    """Run on your own computer: approve posting for @NoonLineNBA in the browser, and the new refresh token goes
+    straight into the X_REFRESH_TOKEN GitHub secret. X's codes last ~30 seconds, too short for a cloud run."""
+    import getpass, subprocess, webbrowser, requests
+    secret = getpass.getpass('X Client Secret (from the app\'s Keys and tokens page; hidden as you paste): ').strip()
+    verifier = secrets.token_urlsafe(48)
+    link = ('https://x.com/i/oauth2/authorize?' + urllib.parse.urlencode({
+        'response_type': 'code', 'client_id': client_id, 'redirect_uri': REDIRECT, 'state': 'noonline',
+        'scope': 'tweet.read tweet.write users.read offline.access media.write', 'code_challenge': verifier,
+        'code_challenge_method': 'plain'}, quote_via=urllib.parse.quote))
+    print('\nOpening X. Click "Authorize app", then paste the address you land on here, right away.\n' + link + '\n')
+    webbrowser.open(link)
+    landed = input('Address you landed on: ').strip()
+    code = urllib.parse.parse_qs(urllib.parse.urlparse(landed).query).get('code', [''])[0]
+    r = requests.post(TOKEN_URL, auth=(client_id, secret), timeout=30, data={
+        'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT, 'code_verifier': verifier,
+        'client_id': client_id})
+    if r.status_code != 200:
+        print(f"Failed ({r.status_code}): {' '.join(r.text.split())[:300]}. Run it again and paste faster.")
+        return
+    tok = r.json()
+    if 'tweet.write' not in tok.get('scope', ''):
+        print('Approved, but without posting permission (scopes: ' + tok.get('scope', '') + '). Nothing saved.')
+        return
+    if 'media.write' not in tok.get('scope', ''):
+        print('Note: approved without image permission (media.write); posts will go out as text only.')
+    subprocess.run(['gh', 'secret', 'set', 'X_REFRESH_TOKEN', '-R', repo], input=tok['refresh_token'], text=True, check=True)
+    print('Done: X_REFRESH_TOKEN updated with a token that can post (' + tok['scope'] + ').')
+
+
+def auth_header():
+    """Authorization for POST /2/tweets: OAuth 2.0 if its four secrets are set, else OAuth 1.0a, else None."""
+    if all(os.environ.get(k) for k in OAUTH2):
+        return 'Bearer ' + oauth2_bearer()
+    keys = {k: os.environ.get(k) for k in KEYS}
+    return oauth_header('POST', URL, keys) if all(keys.values()) else None
+
+
+MEDIA_URL = 'https://api.x.com/2/media/upload'
+
+
+def upload_image(png, auth):
+    """Media id for a PNG, or None (no media.write permission, or any failure: the post goes out as text)."""
+    import requests
+    try:
+        r = requests.post(MEDIA_URL, headers={'Authorization': auth}, timeout=60,
+                          files={'media': ('card.png', png, 'image/png')}, data={'media_category': 'tweet_image'})
+        if r.status_code not in (200, 201):
+            print(f"X: image upload failed ({r.status_code}): {' '.join(r.text.split())[:200]}", flush=True)
+            return None
+        return r.json()['data']['id']
+    except Exception as e:
+        print(f'X: image upload failed ({type(e).__name__}: {e})', flush=True)
+        return None
+
+
 def post_once(key, text, image=None):
     """Post `text` (or a list of posts, as a thread) unless `key` was already posted; `image` (PNG bytes, or a list of
     them, up to 4) goes on the first post when it uploads. Returns a one-line status; never raises (posting must not fail
