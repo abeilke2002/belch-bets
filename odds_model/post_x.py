@@ -8,18 +8,17 @@ Credentials (GitHub secrets), either kind; without them nothing is posted:
     encrypted with X_TOKEN_KEY in data/live/x_token.enc (committed by the run like the rest of data/live). Setting a
     new X_REFRESH_TOKEN secret (re-authorising) takes precedence over the saved one.
   OAuth 1.0a: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET.
-One post per model (points, rebounds, assists), each with that model's season record and the overall record; a model
-with no bets gets a 'no bets today' post saying why. Every bet is reported, wins and losses. Each post goes out once
-(data/live/x_posted.json); nothing on days without games; results (per model with bets) only once that model's night
-is settled;
-no site link (the site is private, and a link costs more per post).
+Noon: one post per model with bets, each bet as player, side, line and sportsbook (nothing else); a model with no
+bets isn't posted, and a day with no bets at all gets one short "No bets today" post. 9 AM: one model update with each
+model's units last night and on the season, and all models together (the site's ledger, so the two agree); on Mondays
+also the weekly scorecard. Each post goes out once (data/live/x_posted.json); nothing on days without games; the
+update only once the night's bets are all settled; text only, no site link (the site is private, and a link costs more per post).
 
     python post_x.py --dry-run       # print what today's posts would say
     ANNOUNCE='text' python post_x.py --announce     # one-off post (the workflow's 'announce' mode)
     ANNOUNCE='picks' python post_x.py --announce    # repost today's picks after a rerun changed them ("Updated")
     python post_x.py --connect       # on your computer: approve posting (text and images) in X, saves X_REFRESH_TOKEN
     python post_x.py --check         # sign in and report the account and permissions, post nothing (workflow 'xcheck')
-Images (x_cards.py) need the token's media.write scope; without it, or if an upload fails, posts go out as text.
 """
 import base64
 import hashlib
@@ -49,7 +48,7 @@ SETTLED = ('win', 'loss', 'push', 'void')
 side = lambda b: 'O' if b['side'] == 'OVER' else 'U'
 STAT = {'points': 'pts', 'rebounds': 'reb', 'assists': 'ast'}
 stat = lambda b: STAT.get(b.get('market') or 'points', 'pts')        # bets before markets existed are points
-units = lambda v: f"{'+' if v >= 0 else '-'}{abs(v):.1f}u"
+units = lambda v: (lambda r: f"{'+' if r >= 0 else '-'}{abs(r):.1f}u")(round(v, 1) + 0.0)        # rounded first: no '-0.0u'
 day_label = lambda d: f"{date.fromisoformat(d):%a %b} {date.fromisoformat(d).day}"
 
 
@@ -62,123 +61,39 @@ def record(bets, pct=True):
     return f"{w}-{l} · {units(u)}" + (f" ({u / risked:+.1%})" if pct and risked else '')
 
 
-def fit(head, lines, tail):
-    """head, a blank line, as many lines as fit 280 characters ('+N more' for the rest), then tail."""
-    for k in range(len(lines), 0, -1):
-        more = [f'+{len(lines) - k} more'] if k < len(lines) else []
-        text = '\n'.join([head, '', *lines[:k], *more, '', *tail])
-        if len(text) <= LIMIT:
-            return text
-    return '\n'.join([head, '', *tail])[:LIMIT]
-
-
 BOOK = {'DraftKings': 'DK', 'FanDuel': 'FD', 'BetMGM': 'MGM', 'Caesars': 'CZR'}
 TAGS_PICKS = '#NBA #NBAPicks #PlayerProps'                  # two or three tags, on the first post of a thread only
 TAGS_RESULTS = '#NBA #NBABets'
 
 
-def pick_block(p):
-    """'Kobe Sanders U 12.5 (-108 DK)' and the reason: projection, chance to hit, season average."""
-    why = f"Model {p['proj']:.1f} {stat(p)} · {p['p']:.0%} to hit"
-    if p.get('season') is not None:
-        why += f" · avg {p['season']:.1f}"
+def pick_line(p):
+    """'Kobe Sanders U 12.5 pts · -108 DK' (and the stake when it isn't 1u)."""
     size = f" · {p['stake']:g}u" if p.get('stake', 1) != 1 else ''
-    return f"{p['player']} {side(p)} {p['line']:g} {stat(p)} ({p['price']:+d} {BOOK.get(p['book'], p['book'])}){size}\n{why}"
+    return f"{p['player']} {side(p)} {p['line']:g} {stat(p)} · {p['price']:+d} {BOOK.get(p['book'], p['book'])}{size}"
 
 
 MODELS = [('points', 'Points'), ('rebounds', 'Rebounds'), ('assists', 'Assists')]
 market_of = lambda b: b.get('market') or 'points'
 ledger_of = lambda site: (site.get('record') or {}).get('x_ledger') or (site.get('record') or {}).get('ledger', [])   # what X reports
 site_ledger_of = lambda site: (site.get('record') or {}).get('site_ledger') or (site.get('record') or {}).get('ledger', [])   # the site's season records
-ADDED = '* added after a model fix'
-
-
-def records_tail(site, market, before=True):
-    """'Rebounds season 3-1 · +1.8u' and 'All models 12-12 · -0.5u' over settled bets (before the page day, or through it).
-    The same ledger as the site's season numbers (with the corrected Nov 7-8 picks), so the posts and the site agree."""
-    led = [b for b in site_ledger_of(site) if (b['date'] < site['date'] if before else b['date'] <= site['date'])]
-    name = dict(MODELS)[market]
-    mine = [b for b in led if market_of(b) == market]
-    out = [f"{name} season {record(mine, pct=False)}" if any(b.get('result') in SETTLED for b in mine) else f"{name} season 0-0"]
-    if any(b.get('result') in SETTLED for b in led):
-        out.append(f"All models {record(led, pct=False)}")
-    return out
-
-
-def no_bets_reason(site, market):
-    """Why a model has no bets today, in a few words."""
-    if site.get('message', '').startswith('No bets: the site sits out'):
-        return 'the site sits out the last two weeks of the season'
-    board = site.get('board') if market == 'points' else ((site.get('markets') or {}).get(market) or {}).get('board')
-    if not board:
-        return f'no {market} lines posted for tonight\'s games'
-    top = [r for r in board if r.get('play') != 'skip']
-    return f"best eligible edge {max(r['edge'] for r in top):+.1%}, under the 2% minimum" if top else 'every prop skipped (injury report, back-to-back)'
-
-
 def picks_posts(site, market, note=''):
-    """One model's bets today, best edge first, each with its reason; that model's season record and the overall record.
-    Bets that don't fit continue in replies (a thread). No bets: one post saying so, and why."""
-    name = dict(MODELS)[market]
+    """One model's bets today, best edge first, one line each; [] without bets. Bets that don't fit continue in replies."""
     bets = sorted([p for p in site.get('picks') or [] if market_of(p) == market], key=lambda p: -p['edge'])
-    head = f"The Noon Line · {name} · {day_label(site['date'])}{note}"
-    recs = records_tail(site, market)
     if not bets:
-        return ['\n\n'.join([head, f"No {market} bets today: {no_bets_reason(site, market)}.", '\n'.join(recs + [TAGS_PICKS])])]
-    sizes = sorted({p['stake'] for p in bets})
-    stake = (f"{sizes[0]:g}u each" if len(bets) > 1 else f"{sizes[0]:g}u") if len(sizes) == 1 else \
-        f"{'/'.join(f'{s:g}' for s in sizes)}u (bigger on 4%+ edges)"
-    tail = '\n'.join([f"{stake} · {recs[0]}", *recs[1:], TAGS_PICKS])
-    blocks, posts = [pick_block(p) for p in bets], []
-    cur = [head]
-    for blk in blocks:
-        trial = '\n\n'.join(cur + [blk] + ([tail] if not posts else []))
-        if len(trial) <= LIMIT or len(cur) == (1 if not posts else 0):
-            cur.append(blk)
-        else:
-            posts.append('\n\n'.join(cur + ([tail] if not posts else [])))
-            cur = [blk]                                  # this bet starts the next post
-    posts.append('\n\n'.join(cur + ([tail] if not posts else [])))
-    if len(posts) > 1:
-        posts = [t + f"\n({i + 1}/{len(posts)})" if len(t) + 6 <= LIMIT else t for i, t in enumerate(posts)]
+        return []
+    head = f"The Noon Line · {dict(MODELS)[market]} · {day_label(site['date'])}{note}"
+    posts, cur = [], [head, '']
+    for line in map(pick_line, bets):
+        tail = ['', TAGS_PICKS] if not posts else []
+        if len('\n'.join(cur + [line] + tail)) > LIMIT and len(cur) > (2 if not posts else 0):
+            posts.append('\n'.join(cur + tail)); cur = []
+        cur.append(line)
+    posts.append('\n'.join(cur + (['', TAGS_PICKS] if not posts else [])))
     return posts
 
 
-def breakdown_image(site, market):
-    """PNG of the model's top bet explained (x_cards.breakdown_card), or None."""
-    try:
-        import x_cards
-        bets = sorted([p for p in site.get('picks') or [] if market_of(p) == market], key=lambda p: -p['edge'])
-        if not bets:
-            return None
-        top = bets[0]
-        e = (site.get('explain') or {}).get(f"{market}:{top.get('PLAYER_ID')}")
-        return x_cards.breakdown_card(market, day_label(site['date']), top, e)
-    except Exception:
-        return None
-
-
-def picks_image(site, market):
-    """PNG for one model's picks post, or None (no bets, or the image can't be drawn)."""
-    try:
-        import x_cards
-        bets = sorted([p for p in site.get('picks') or [] if market_of(p) == market], key=lambda p: -p['edge'])
-        return x_cards.picks_card(market, day_label(site['date']), bets, records_tail(site, market))
-    except Exception:
-        return None
-
-
-def results_image(site, market):
-    """PNG for one model's results post, or None."""
-    try:
-        import x_cards
-        return x_cards.results_card(market, day_label(site['date']), night(site, market), records_tail(site, market, before=False))
-    except Exception:
-        return None
-
-
 def picks_text(site):
-    return '\n\n=====\n\n'.join('\n\n---\n\n'.join(picks_posts(site, m)) for m, _ in MODELS)     # for --dry-run
+    return '\n\n=====\n\n'.join('\n\n---\n\n'.join(picks_posts(site, m)) or f'({m}: no bets, no post)' for m, _ in MODELS)     # for --dry-run
 
 
 def night(site, market=None):
@@ -206,130 +121,17 @@ def week_text(ledger, monday):
     return '\n'.join(['The Noon Line · weekly scorecard', ''] + lines + ['', 'Every bet counted, wins and losses.', TAGS_RESULTS])[:LIMIT]
 
 
-def results_text(site, market):
-    """One model's bets from the night with the stat and result, the night's total, that model's season and the overall."""
-    word = {'win': 'W', 'loss': 'L', 'push': 'push', 'void': 'void, DNP'}
-    bets = night(site, market)
-    lines = [f"{b['player']}{'*' if b.get('added') else ''} {side(b)} {b['line']:g} {stat(b)}: " + (f"{b['points']:g}, " if b.get('points') is not None else '')
-             + word[b['result']] for b in bets]
-    return fit(f"The Noon Line · {dict(MODELS)[market]} results · {day_label(site['date'])}", lines,
-               [f"Night: {record(bets, pct=False)}", *records_tail(site, market, before=False), *([ADDED] if any(b.get('added') for b in bets) else []), '', TAGS_RESULTS])
-
-
-def oauth_header(method, url, keys, params=None):
-    """OAuth 1.0a (HMAC-SHA1) header. A JSON body is not part of the signature; `params` (query or form fields)
-    would be (used to check it against the worked example in X's OAuth docs, signature hCtSmYh+iHYCEqBWrE7C7hYmtUk=)."""
-    q = lambda s: urllib.parse.quote(str(s), safe='~')
-    p = {'oauth_consumer_key': keys['X_API_KEY'], 'oauth_nonce': secrets.token_hex(16),
-         'oauth_signature_method': 'HMAC-SHA1', 'oauth_timestamp': str(int(time.time())),
-         'oauth_token': keys['X_ACCESS_TOKEN'], 'oauth_version': '1.0'}
-    signed = {**p, **(params or {})}
-    base = '&'.join([method, q(url), q('&'.join(f'{q(k)}={q(v)}' for k, v in sorted(signed.items())))])
-    key = f"{q(keys['X_API_SECRET'])}&{q(keys['X_ACCESS_SECRET'])}"
-    p['oauth_signature'] = base64.b64encode(hmac.new(key.encode(), base.encode(), hashlib.sha1).digest()).decode()
-    return 'OAuth ' + ', '.join(f'{q(k)}="{q(v)}"' for k, v in sorted(p.items()))
-
-
-def _crypt(text, decrypt=False):
-    """AES-256 with the X_TOKEN_KEY secret (openssl), base64 on one line."""
-    return subprocess.run(['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-salt', '-a', '-A', *(['-d'] if decrypt else []),
-                           '-pass', 'env:X_TOKEN_KEY'], input=text, capture_output=True, text=True, check=True).stdout
-
-
-def oauth2_bearer():
-    """A fresh OAuth 2.0 access token. Uses the saved refresh token unless the X_REFRESH_TOKEN secret has changed since
-    it was saved, then stores the new (rotated) refresh token before returning."""
-    import requests
-    seed = hashlib.sha256(os.environ['X_REFRESH_TOKEN'].encode()).hexdigest()[:16]
-    saved = json.loads(_crypt(TOKEN_FILE.read_text(), decrypt=True)) if TOKEN_FILE.exists() else {}
-    refresh = saved['refresh'] if saved.get('seed') == seed else os.environ['X_REFRESH_TOKEN']
-    cid = os.environ['X_CLIENT_ID']
-    r = requests.post(TOKEN_URL, data={'grant_type': 'refresh_token', 'refresh_token': refresh, 'client_id': cid},
-                      auth=(cid, os.environ['X_CLIENT_SECRET']), timeout=30)
-    if r.status_code != 200:
-        raise RuntimeError(f'token refresh failed ({r.status_code}): {r.text[:200]}')
-    tok = r.json()
-    global SCOPES
-    SCOPES = tok.get('scope', '')                       # e.g. 'tweet.write users.read tweet.read offline.access'
-    TOKEN_FILE.parent.mkdir(exist_ok=True)
-    TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
-    return tok['access_token']
-
-
-REDIRECT = 'https://x.com/NoonLineNBA'                     # the app's callback URI (must match it exactly)
-
-
-def authorize(code, verifier):
-    """Swap an authorization code (from the consent link, PKCE 'plain') for tokens that can post, and save the refresh
-    token so the next post uses it (seeded to the current X_REFRESH_TOKEN secret). Returns the granted scopes."""
-    import requests
-    cid = os.environ['X_CLIENT_ID']
-    r = requests.post(TOKEN_URL, data={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT,
-                                       'code_verifier': verifier, 'client_id': cid},
-                      auth=(cid, os.environ['X_CLIENT_SECRET']), timeout=30)
-    if r.status_code != 200:
-        raise RuntimeError(f"code exchange failed ({r.status_code}): {' '.join(r.text.split())[:300]}")
-    tok = r.json()
-    seed = hashlib.sha256(os.environ['X_REFRESH_TOKEN'].encode()).hexdigest()[:16]
-    TOKEN_FILE.parent.mkdir(exist_ok=True)
-    TOKEN_FILE.write_text(_crypt(json.dumps({'seed': seed, 'refresh': tok['refresh_token']})))
-    return tok.get('scope', '')
-
-
-def connect(repo='abeilke2002/belch-bets', client_id='Ri1IdEtoWXFPckxteEFkR1RrRUQ6MTpjaQ'):
-    """Run on your own computer: approve posting for @NoonLineNBA in the browser, and the new refresh token goes
-    straight into the X_REFRESH_TOKEN GitHub secret. X's codes last ~30 seconds, too short for a cloud run."""
-    import getpass, subprocess, webbrowser, requests
-    secret = getpass.getpass('X Client Secret (from the app\'s Keys and tokens page; hidden as you paste): ').strip()
-    verifier = secrets.token_urlsafe(48)
-    link = ('https://x.com/i/oauth2/authorize?' + urllib.parse.urlencode({
-        'response_type': 'code', 'client_id': client_id, 'redirect_uri': REDIRECT, 'state': 'noonline',
-        'scope': 'tweet.read tweet.write users.read offline.access media.write', 'code_challenge': verifier,
-        'code_challenge_method': 'plain'}, quote_via=urllib.parse.quote))
-    print('\nOpening X. Click "Authorize app", then paste the address you land on here, right away.\n' + link + '\n')
-    webbrowser.open(link)
-    landed = input('Address you landed on: ').strip()
-    code = urllib.parse.parse_qs(urllib.parse.urlparse(landed).query).get('code', [''])[0]
-    r = requests.post(TOKEN_URL, auth=(client_id, secret), timeout=30, data={
-        'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT, 'code_verifier': verifier,
-        'client_id': client_id})
-    if r.status_code != 200:
-        print(f"Failed ({r.status_code}): {' '.join(r.text.split())[:300]}. Run it again and paste faster.")
-        return
-    tok = r.json()
-    if 'tweet.write' not in tok.get('scope', ''):
-        print('Approved, but without posting permission (scopes: ' + tok.get('scope', '') + '). Nothing saved.')
-        return
-    if 'media.write' not in tok.get('scope', ''):
-        print('Note: approved without image permission (media.write); posts will go out as text only.')
-    subprocess.run(['gh', 'secret', 'set', 'X_REFRESH_TOKEN', '-R', repo], input=tok['refresh_token'], text=True, check=True)
-    print('Done: X_REFRESH_TOKEN updated with a token that can post (' + tok['scope'] + ').')
-
-
-def auth_header():
-    """Authorization for POST /2/tweets: OAuth 2.0 if its four secrets are set, else OAuth 1.0a, else None."""
-    if all(os.environ.get(k) for k in OAUTH2):
-        return 'Bearer ' + oauth2_bearer()
-    keys = {k: os.environ.get(k) for k in KEYS}
-    return oauth_header('POST', URL, keys) if all(keys.values()) else None
-
-
-MEDIA_URL = 'https://api.x.com/2/media/upload'
-
-
-def upload_image(png, auth):
-    """Media id for a PNG, or None (no media.write permission, or any failure: the post goes out as text)."""
-    import requests
-    try:
-        r = requests.post(MEDIA_URL, headers={'Authorization': auth}, timeout=60,
-                          files={'media': ('card.png', png, 'image/png')}, data={'media_category': 'tweet_image'})
-        if r.status_code not in (200, 201):
-            print(f"X: image upload failed ({r.status_code}): {' '.join(r.text.split())[:200]}", flush=True)
-            return None
-        return r.json()['data']['id']
-    except Exception as e:
-        print(f'X: image upload failed ({type(e).__name__}: {e})', flush=True)
-        return None
+def update_text(site):
+    """The 9 AM model update: each model's units last night (or 'no bets') and on the season, then all models."""
+    led = [b for b in site_ledger_of(site) if b['date'] <= site['date'] and b.get('result') in SETTLED]
+    u = lambda bets: units(sum(b['units'] or 0 for b in bets))
+    lines = []
+    for m, name in MODELS + [(None, 'All models')]:
+        mine = [b for b in led if m is None or market_of(b) == m]
+        last = [b for b in mine if b['date'] == site['date']]
+        if mine:
+            lines.append(f"{name}: {u(last) + ' last night' if last else 'no bets'} · {u(mine)} season")
+    return '\n'.join([f"The Noon Line · Model update · {day_label(site['date'])}", '', *lines, '', TAGS_RESULTS])
 
 
 def post_once(key, text, image=None):
@@ -371,23 +173,24 @@ def posted_keys():
 
 
 def post_picks(site):
-    """Noon: one post per model, bets or not (nothing on days without games or when the run failed)."""
+    """Noon: one post per model with bets, or one 'No bets today' post (nothing on days without games or a failed run)."""
     if not site.get('games') or site.get('status') == 'error':
         return 'X: no games or no picks today, nothing posted'
     if site['date'] in posted_keys():                   # posted before the per-model format: don't repost the day
         return f"X: already posted {site['date']}"
-    return '; '.join(post_once(f"{site['date']}:{m}", picks_posts(site, m), [picks_image(site, m), breakdown_image(site, m)])
-                     for m, _ in MODELS)
+    out = [post_once(f"{site['date']}:{m}", picks_posts(site, m)) for m, _ in MODELS if picks_posts(site, m)]
+    return '; '.join(out) or post_once(f"{site['date']}:none", f"The Noon Line · {day_label(site['date'])}\n\nNo bets today.")
 
 
 def post_results(site, today=None):
-    """Last night's results; on Mondays also the weekly scorecard for the 7 days before."""
-    if 'results:' + site['date'] in posted_keys():        # posted before the per-model format
-        out = [f"X: already posted results:{site['date']}"]
+    """9 AM: the model update for last night (once its bets are all settled); on Mondays also the weekly scorecard."""
+    done = posted_keys()
+    if 'results:' + site['date'] in done or any(f"results:{site['date']}:{m}" in done for m, _ in MODELS):
+        out = [f"X: already posted results for {site['date']}"]            # the old per-model results format
+    elif night(site):
+        out = [post_once('update:' + site['date'], update_text(site))]
     else:
-        out = [post_once(f"results:{site['date']}:{m}", results_text(site, m), results_image(site, m))
-               for m, _ in MODELS if night(site, m)] \
-              or ['X: no settled bets for that night, nothing posted']
+        out = ['X: no settled bets for that night, nothing posted']
     today = today or datetime.now(ZoneInfo('America/New_York')).date()
     if today.weekday() == 0:
         monday, ledger = today.isoformat(), site_ledger_of(site)
@@ -418,14 +221,13 @@ if __name__ == '__main__':
         if text.lower() == 'picks':                       # the day's picks changed after the noon post
             for m, _ in MODELS:                            # one update per model, each distinct version posted once
                 posts = picks_posts(site, m, ' · Updated')
-                print(post_once(f"{site['date']}:{m}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts,
-                                picks_image(site, m)))
+                if posts:
+                    print(post_once(f"{site['date']}:{m}:update:" + hashlib.sha256('|'.join(posts).encode()).hexdigest()[:12], posts))
             sys.exit()
         print(post_once('announce:' + hashlib.sha256(text.encode()).hexdigest()[:12], text) if text else 'X: no text given')
     elif '--dry-run' in sys.argv:
         print(picks_text(site), '\n=====')
-        for m, _ in MODELS:
-            print(results_text(site, m) if night(site, m) else f'results ({m}): nothing settled for that night', '\n---')
+        print(update_text(site) if night(site) else 'update: nothing settled for that night', '\n---')
         print(week_text(site_ledger_of(site), sys.argv[-1] if sys.argv[-1][:2] == '20' else date.today().isoformat()))
     else:
         print(post_picks(site))
