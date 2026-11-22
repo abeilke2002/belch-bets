@@ -21,7 +21,8 @@ from parse_odds import american_to_prob
 
 from config import STAKE_RULE as SM_STAKE
 PLAN = {'2025-26': ['2023-24', '2024-25'], '2024-25': ['2023-24']}
-MARKETS = {'rebounds': ('reb', ['dlogit'], ('UNDER',)), 'assists': ('ast', ['gap', 'gapz'], ('OVER', 'UNDER'))}
+# each market's stat, over/under inputs and sides, from the live model's settings (so the backtest can't drift from it)
+MARKETS = {m: (cfg['key'], list(cfg['clf']), tuple(cfg['sides'])) for m, cfg in SM.MARKETS.items()}
 MIN_EDGE, STAKE = 0.02, 1.0
 
 
