@@ -27,8 +27,10 @@ from regression import fit, load_rows, minutes_for_season, selected
 MODEL_PATH = DATA / 'models' / 'stat_models.pkl'
 # full: every feature, including the opponent's absences, teammates returning and position absences (all known at
 # noon; stat_backtest --tag _noon). Kept for assists (+28.6u over three seasons); rebounds did better without them.
+# clf: assists switched from gap/gapz to the negative-binomial dlogit (rebounds' method) on 2026-11-22: backtest
+# 2024-26 +101.4u on 2,160 bets vs +48.7u on 1,129, log loss -5.3 +- 2.6 (x1e-4, paired), calibration slope 0.82 -> 0.94.
 MARKETS = {'rebounds': {'key': 'reb', 'sides': ('UNDER',), 'clf': ['dlogit'], 'full': False, 'preds': '_nohind'},
-           'assists': {'key': 'ast', 'sides': ('OVER', 'UNDER'), 'clf': ['gap', 'gapz'], 'full': True, 'preds': '_noon'}}
+           'assists': {'key': 'ast', 'sides': ('OVER', 'UNDER'), 'clf': ['dlogit'], 'full': True, 'preds': '_noon'}}
 
 
 def features_for(key, full=False):
