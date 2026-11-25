@@ -46,13 +46,14 @@
   const userState = () => store.get('bb-state') || '';
   const FALLBACK = { DraftKings: 'https://sportsbook.draftkings.com/leagues/basketball/nba', FanDuel: 'https://sportsbook.fanduel.com/navigation/nba',
                      BetMGM: 'https://sports.{state}.betmgm.com/en/sports/basketball-7/betting/usa-9/nba-6004', Caesars: 'https://sportsbook.caesars.com/us/{state}/bet/basketball' };
+  const mgm = url => url && url.replace('//sports.{state}.betmgm.com', '//www.{state}.betmgm.com');   // BetMGM moved its sites to www.{state}
   const betUrl = url => !url ? null : !url.includes('{state}') ? url : userState() ? url.replaceAll('{state}', userState()) : '#state';
   function book(name, url) {
     const inner = `<span class="bk">${LOGO[name] ? `<img src="img/${LOGO[name]}.png" alt="">` : ''}${esc(name)}</span>`;
-    const u = betUrl(url || FALLBACK[name]);
+    const raw = mgm(url || FALLBACK[name]), u = betUrl(raw);
     if (!u) return inner;
-    const tip = u === '#state' ? `Set your state at the bottom of the page to open ${name}` : url ? `Add this bet to your ${name} bet slip` : `Open ${name}`;
-    return `<a class="bklink" href="${esc(u)}"${u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : ''} title="${esc(tip)}">${inner}</a>`;
+    const tip = u === '#state' ? `Choose your state to open ${name}` : url ? `Add this bet to your ${name} bet slip` : `Open ${name}`;
+    return `<a class="bklink" href="${esc(u)}"${u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : ` data-url="${esc(raw)}" data-name="${esc(name)}"`} title="${esc(tip)}">${inner}</a>`;
   }
   function statePicker(sel, onChange) {
     sel.innerHTML = '<option value="">Choose</option>' + STATES.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');

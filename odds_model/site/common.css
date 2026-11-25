@@ -388,3 +388,12 @@ footer a { color: var(--ink-2); }
 .pill.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }
 @keyframes blink { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .pill.live i { animation: none; } }
+
+/* "choose your state" popup for BetMGM / Caesars links */
+.statedlg { background: var(--bg); color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; padding: 16px; max-width: 300px; width: calc(100% - 32px); }
+.statedlg::backdrop { background: rgba(0, 0, 0, .55); }
+.statedlg p { margin: 0 0 12px; }
+.statedlg select { width: 100%; background: var(--bg); color: var(--ink); border: 1px solid var(--line-2); border-radius: 6px; padding: 8px; font: inherit; }
+.statedlg .go { display: block; margin-top: 12px; padding: 10px; text-align: center; border-radius: 8px; background: var(--ink); color: var(--bg); font-weight: 600; text-decoration: none; }
+.statedlg .go[hidden] { display: none; }
+.statedlg .x { display: block; margin: 10px auto 0; background: none; border: 0; color: inherit; opacity: .7; font: inherit; cursor: pointer; }

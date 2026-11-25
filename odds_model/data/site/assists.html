@@ -161,11 +161,12 @@ const FALLBACK = { DraftKings: 'https://sportsbook.draftkings.com/leagues/basket
                    BetMGM: 'https://sports.{state}.betmgm.com/en/sports/basketball-7/betting/usa-9/nba-6004',
                    Caesars: 'https://sportsbook.caesars.com/us/{state}/bet/basketball' };
 function betUrl(url) { if (!url) return null; if (!url.includes('{state}')) return url; return userState() ? url.replaceAll('{state}', userState()) : '#state'; }
+const mgm = url => url && url.replace('//sports.{state}.betmgm.com', '//www.{state}.betmgm.com');   // BetMGM moved its sites to www.{state}
 const linkWrap = (url, name, inner) => {
-  const u = betUrl(url || FALLBACK[name]);
+  const raw = mgm(url || FALLBACK[name]), u = betUrl(raw);
   if (!u) return inner;
-  const ext = u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : '';
-  const tip = u === '#state' ? `Set your state at the bottom of the page to open ${name}` : url ? `Add this bet to your ${name} bet slip` : `Open the ${name} NBA page`;
+  const ext = u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : ` data-url="${esc(raw)}" data-name="${esc(name)}"`;
+  const tip = u === '#state' ? `Choose your state to open ${name}` : url ? `Add this bet to your ${name} bet slip` : `Open the ${name} NBA page`;
   return `<a class="bklink" href="${esc(u)}"${ext} title="${esc(tip)}">${inner}</a>`;
 };
 const logo = (name, url) => LOGO[name] ? linkWrap(url, name, `<img src="img/${LOGO[name]}.png" alt="${esc(name)}" title="${esc(name)}">`) : '';
@@ -666,5 +667,6 @@ async function show(date) {
   setView('deep');                                   // the Board: the deep-dive tools only (today and results have their own pages)
 })();
 </script>
+<script src="statelink.js"></script>
 </body>
 </html>

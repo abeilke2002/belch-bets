@@ -1031,7 +1031,7 @@ def copy_pages(paths):
     """The site's pages, past seasons (build_history*.py), shared styles and sportsbook logos into the published folder.
     rebounds.html and assists.html are both made from site/market.html."""
     src = ROOT / 'site'
-    for page in [*src.glob('*.html'), *src.glob('seasons*.json'), src / 'model.js', src / 'app.js', src / 'explain.js', src / 'explain.css', src / 'common.css']:
+    for page in [*src.glob('*.html'), *src.glob('seasons*.json'), src / 'model.js', src / 'app.js', src / 'statelink.js', src / 'explain.js', src / 'explain.css', src / 'common.css']:
         if page.name != 'market.html' and page.exists():
             shutil.copy(page, paths.site / page.name)
     tmpl = (src / 'market.html').read_text()

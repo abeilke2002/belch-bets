@@ -441,11 +441,12 @@ function betUrl(url) {
   if (!url.includes('{state}')) return url;
   return userState() ? url.replaceAll('{state}', userState()) : '#state';
 }
+const mgm = url => url && url.replace('//sports.{state}.betmgm.com', '//www.{state}.betmgm.com');   // BetMGM moved its sites to www.{state}
 const linkWrap = (url, name, inner) => {
-  const u = betUrl(url || FALLBACK[name]);
+  const raw = mgm(url || FALLBACK[name]), u = betUrl(raw);
   if (!u) return inner;
-  const ext = u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : '';
-  const tip = u === '#state' ? `Set your state at the bottom of the page to open ${name}`
+  const ext = u !== '#state' ? ' target="_blank" rel="noopener noreferrer"' : ` data-url="${esc(raw)}" data-name="${esc(name)}"`;
+  const tip = u === '#state' ? `Choose your state to open ${name}`
     : url ? `Add this bet to your ${name} bet slip` : `Open the ${name} NBA page`;
   return `<a class="bklink" href="${esc(u)}"${ext} title="${esc(tip)}" data-book>${inner}</a>`;
 };
@@ -453,9 +454,9 @@ const logo = (name, url) => LOGO[name] ? linkWrap(url, name, `<img src="img/${LO
 const book = (name, url) => linkWrap(url, name, `<span class="bk">${LOGO[name] ? `<img src="img/${LOGO[name]}.png" alt="">` : ''}${esc(name)}<span class="ext" aria-hidden="true">↗</span></span>`);
 // The pick's call to action: a real button
 function betButton(name, url, side, line) {
-  const u = betUrl(url || FALLBACK[name]);
+  const raw = mgm(url || FALLBACK[name]), u = betUrl(raw);
   if (!u) return '';
-  const needState = u === '#state', ext = needState ? '' : ' target="_blank" rel="noopener noreferrer"';
+  const needState = u === '#state', ext = needState ? ` data-url="${esc(raw)}" data-name="${esc(name)}"` : ' target="_blank" rel="noopener noreferrer"';
   const label = needState ? `Set your state to bet at ${esc(name)}` : `Bet ${cap(side)} ${line} at ${esc(name)}`;
   const note = needState ? '' : url ? 'Adds it to your bet slip. Check the price before placing it.'
     : `Opens the ${esc(name)} NBA page. Find the player there; one-tap bet slip links start with live picks.`;
@@ -1163,5 +1164,6 @@ async function show(date) {
   $('board-reset').onclick = () => { store.set(ovKey(), '{}'); OPEN = null; renderBoard(); renderMine(); };
 })();
 </script>
+<script src="statelink.js"></script>
 </body>
 </html>
